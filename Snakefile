@@ -113,3 +113,13 @@ rule call_snps:
             --strand-filter 1 \
             --output-vcf 1 > {output.vcf}
         """
+
+rule vcf_to_consensus:
+    input:
+        vcf = rules.call_snps.output.vcf
+    output:
+        consensus_genome = "consensus_genomes/{reference}/{sample}.consensus.fasta"
+    shell:
+        """
+        touch {output.consensus_genome}
+        """

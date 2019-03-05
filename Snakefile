@@ -55,10 +55,9 @@ rule trim_fastqs:
 rule map:
     input:
         fastq = rules.trim_fastqs.output.trimmed_fastq,
-        reference = ""
+        reference = "references/{reference}.fasta"
     output:
-        sorted_sam_file = ""
-    params:
+        sorted_sam_file = "process/mapped/{reference}/{sample}.sorted.sam"
     shell:
         """
         bowtie2 \
@@ -76,15 +75,15 @@ rule remove_duplicate_reads:
     input:
         sorted_sam = rules.map.output.sorted_sam_file
     output:
-        deduped = ""
+        deduped = "process/deduped/{reference}/{sample}.nodups.sam"
     params:
         picard_params = "file.params.txt"
     shell:
         """
         java -jar /usr/local/bin/picard.jar \
             MarkDuplicates \
-            I={params.input} \
-            O={params.output} \
+            I={input.sorted_sam} \
+            O={output.deduped} \
             REMOVE_DUPLICATES=true \
             M={params.picard_params}
         """
@@ -92,9 +91,9 @@ rule remove_duplicate_reads:
 rule call_snps:
     input:
         deduped_sam = rules.remove_duplicate_reads.output.deduped,
-        reference = ""
+        reference = "references/{reference}.fasta"
     output:
-        vcf = ""
+        vcf = "process/vcfs/{reference}/{sample}.vcf"
     params:
         depth = "1000000",
         min_cov = "",
@@ -108,7 +107,7 @@ rule call_snps:
             -f {input.reference}
         java -jar /usr/local/bin/VarScan.v2.3.9.jar mpileup2snp \
             process/tmp.pileup \
-            --min-coverage {params.min_coverage} \
+            --min-coverage {params.min_cov} \
             --min-avg-qual {params.snp_qual_threshold} \
             --min-var-freq {params.snp_frequency} \
             --strand-filter 1 \

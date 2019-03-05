@@ -1,4 +1,7 @@
-consensus/
+consensus_genomes/
 test_data/
-summary
-process
+summary/
+process/
+
+.snakemake
+__pycache__

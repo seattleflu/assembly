@@ -1,0 +1,13 @@
+name: seattle-flu
+channels:
+  - bioconda
+  - defaults
+  - conda-forge
+dependencies:
+  - bowtie2
+  - picard
+  - python=3.6
+  - samtools
+  - snakemake
+  - trimmomatic
+  - varscan

@@ -19,9 +19,21 @@ https://github.com/lmoncla/illumina_pipeline
 import glob
 from config import CONFIG
 
-all_sample_names = [ f.split('.')[0] for f in  glob.glob(CONFIG['fastq_directory']) ]
-all_references = [ v for v in  glob.glob(CONFIG['reference_viruses']) ]
+#### Helper functions and variable def'ns
+def generate_sample_names(config):
+    sample_names = []
+    for f in glob.glob("{}/*".format(config['fastq_directory'])):
+        if f.endswith('.fastq.gz'):
+            f = f.split('.')[0].split('/')[-1]
+            sample_names.append(f)
+    return sample_names
 
+all_sample_names = generate_sample_names(CONFIG)
+all_references = [ v for v in  CONFIG['reference_viruses'].keys() ]
+
+
+#### Main pipeline
+configfile: "config.json"
 rule all:
     input:
         consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta",

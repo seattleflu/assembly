@@ -1,0 +1,21 @@
+{
+  "fastq_directory" :
+    "test_data",
+  "reference_viruses" :
+    {
+      "h1n1pdm" :
+        "A-california-04-2009-h1n1"
+    },
+  "params" :
+    {
+      "trimmomatic" :
+        {
+          "paired_end" : "SE",
+          "adapters" : "TruSeq3-SE.fa",
+          "illumina_clip" : "1:30:10",
+          "window_size" : "5",
+          "trim_qscore" : "30",
+          "minimum_length" : "10"
+        }
+    }
+}

@@ -45,18 +45,19 @@ rule trim_fastqs:
     input:
         fastq = "test_data/{sample}.fastq.gz"
     output:
-        trimmed_fastq = "{sample}.trimmed.fastq"
+        trimmed_fastq = "process/trimmed/{reference}/{sample}.trimmed.fastq"
     params:
-        paired_end = "SE",
-        adapters = "path/to/adapters",
-        illumina_clip = "1:30:10",
-        window_size = "",
-        trim_qscore = "",
-        minimum_length = ""
+        paired_end = config["params"]["trimmomatic"]["paired_end"],
+        adapters = config["params"]["trimmomatic"]["adapters"],
+        illumina_clip = config["params"]["trimmomatic"]["illumina_clip"],
+        window_size = config["params"]["trimmomatic"]["window_size"],
+        trim_qscore = config["params"]["trimmomatic"]["trim_qscore"],
+        minimum_length = config["params"]["trimmomatic"]["minimum_length"]
     shell:
         """
-        java \-jar /usr/local/bin/Trimmomatic-0.36/trimmomatic-0.36.jar \
+        trimmomatic \
             {params.paired_end} \
+            -phred33 \
             {input.fastq} \
             {output.trimmed_fastq} \
             ILLUMINACLIP:{params.adapters}:{params.illumina_clip} \

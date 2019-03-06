@@ -2,6 +2,7 @@ consensus_genomes/
 test_data/
 summary/
 process/
+data/
 
 .snakemake
 __pycache__

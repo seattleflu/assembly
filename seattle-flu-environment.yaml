@@ -5,6 +5,8 @@ channels:
   - conda-forge
 dependencies:
   - bowtie2
+  - curl
+  - ncurses=6.1
   - picard
   - python=3.6
   - samtools

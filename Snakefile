@@ -66,26 +66,34 @@ rule trim_fastqs:
 
 rule map:
     input:
-        fastq = rules.trim_fastqs.output.trimmed_fastq,
-        reference = "references/{reference}.fasta"
+        fastq = rules.trim_fastqs.output.trimmed_fastq
     output:
-        sorted_sam_file = "process/mapped/{reference}/{sample}.sorted.sam"
+        mapped_sam_file = "process/mapped/{reference}/{sample}.sam"
     shell:
         """
         bowtie2 \
-            -x {input.reference} \
+            -x references/{wildcards.reference} \
             -U {input.fastq} \
-            -S tmp/tmp.sam \
+            -S {output.mapped_sam_file} \
             --local
+        """
+
+rule sort:
+    input:
+        mapped_sam = rules.map.output.mapped_sam_file
+    output:
+        sorted_sam_file = "process/sorted/{reference}/{sample}.sorted.sam"
+    shell:
+        """
         samtools view \
-            -bS tmp/tmp.sam | \
+            -bS {input.mapped_sam} | \
             samtools sort | \
             samtools view -h > {output.sorted_sam_file}
         """
 
 rule remove_duplicate_reads:
     input:
-        sorted_sam = rules.map.output.sorted_sam_file
+        sorted_sam = rules.sort.output.sorted_sam_file
     output:
         deduped = "process/deduped/{reference}/{sample}.nodups.sam"
     params:

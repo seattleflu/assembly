@@ -16,24 +16,24 @@ Basic steps:
 Adapted from Louise Moncla's illumina pipeline for influenza snp calling:
 https://github.com/lmoncla/illumina_pipeline
 """
+import sys, os
 import glob
-from config import CONFIG
+configfile: "config.json"
 
 #### Helper functions and variable def'ns
-def generate_sample_names(config):
+def generate_sample_names(cfg):
     sample_names = []
-    for f in glob.glob("{}/*".format(config['fastq_directory'])):
+    for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
         if f.endswith('.fastq.gz'):
             f = f.split('.')[0].split('/')[-1]
             sample_names.append(f)
     return sample_names
 
-all_sample_names = generate_sample_names(CONFIG)
-all_references = [ v for v in  CONFIG['reference_viruses'].keys() ]
+all_sample_names = generate_sample_names(config)
+all_references = [ v for v in  config['reference_viruses'].keys() ]
 
 
 #### Main pipeline
-configfile: "config.json"
 rule all:
     input:
         consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta",

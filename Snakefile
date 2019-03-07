@@ -101,7 +101,7 @@ rule remove_duplicate_reads:
         picard_params = "file.params.txt"
     shell:
         """
-        java -jar /usr/local/bin/picard.jar \
+        picard \
             MarkDuplicates \
             I={input.sorted_sam} \
             O={output.deduped} \

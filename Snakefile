@@ -25,8 +25,9 @@ def generate_sample_names(cfg):
     sample_names = []
     for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
         if f.endswith('.fastq.gz'):
-            f = f.split('.')[0].split('/')[-1]
-            sample_names.append(f)
+            if "R1" in f:
+                f = f.split('.')[0].split('/')[-1]
+                sample_names.append(f)
     return sample_names
 
 all_sample_names = generate_sample_names(config)
@@ -43,9 +44,12 @@ rule all:
 
 rule trim_fastqs:
     input:
-        fastq = "test_data/{sample}.fastq.gz"
+        fastq = "%s/{sample}.fastq.gz"%(config["fastq_directory"])
     output:
-        trimmed_fastq = "process/trimmed/{reference}/{sample}.trimmed.fastq"
+        trimmed_fastq_1p = "process/trimmed/{reference}/{sample}.trimmed_1P.fastq",
+        trimmed_fastq_2p = "process/trimmed/{reference}/{sample}.trimmed_2P.fastq",
+        trimmed_fastq_1u = "process/trimmed/{reference}/{sample}.trimmed_1U.fastq",
+        trimmed_fastq_2u = "process/trimmed/{reference}/{sample}.trimmed_2U.fastq"
     params:
         paired_end = config["params"]["trimmomatic"]["paired_end"],
         adapters = config["params"]["trimmomatic"]["adapters"],
@@ -58,8 +62,8 @@ rule trim_fastqs:
         trimmomatic \
             {params.paired_end} \
             -phred33 \
-            {input.fastq} \
-            {output.trimmed_fastq} \
+            -basein {input.fastq} \
+            -baseout process/trimmed/{wildcards.reference}/{wildcards.sample}.trimmed.fastq \
             ILLUMINACLIP:{params.adapters}:{params.illumina_clip} \
             SLIDINGWINDOW:{params.window_size}:{params.trim_qscore} \
             MINLEN:{params.minimum_length}
@@ -67,14 +71,19 @@ rule trim_fastqs:
 
 rule map:
     input:
-        fastq = rules.trim_fastqs.output.trimmed_fastq
+        p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
+        p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
+        u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
+        u2 = rules.trim_fastqs.output.trimmed_fastq_2u
     output:
         mapped_sam_file = "process/mapped/{reference}/{sample}.sam"
     shell:
         """
         bowtie2 \
             -x references/{wildcards.reference} \
-            -U {input.fastq} \
+            -1 {input.p1} \
+            -2 {input.p2} \
+            -U {input.u1},{input.u2} \
             -S {output.mapped_sam_file} \
             --local
         """

@@ -4,7 +4,13 @@
   "reference_viruses" :
     {
       "h1n1pdm" :
-        "A-california-04-2009-h1n1"
+        "A/California/04/2009(h1n1)",
+      "h3n2" :
+        "A/Hong Kong/4801/2014(h3n2)",
+      "vic" :
+        "B/Michigan/49/2017 (vic-like)",
+      "yam" :
+        "B/Phuket/3073/2013 (yam-like)"
     },
   "params" :
     {

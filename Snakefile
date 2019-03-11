@@ -107,7 +107,7 @@ rule remove_duplicate_reads:
     output:
         deduped = "process/deduped/{reference}/{sample}.nodups.sam"
     params:
-        picard_params = "file.params.txt"
+        picard_params = "summary/file.params.txt"
     shell:
         """
         picard \
@@ -144,12 +144,36 @@ rule call_snps:
             --output-vcf 1 > {output.vcf}
         """
 
-rule vcf_to_consensus:
+rule zip_vcf:
     input:
         vcf = rules.call_snps.output.vcf
+    output:
+        bcf = "process/vcfs/{reference}/{sample}.vcf.gz"
+    shell:
+        """
+        bgzip {input.vcf}
+        """
+
+rule index_bcf:
+    input:
+        bcf = rules.zip_vcf.output.bcf
+    output:
+        index = "process/vcfs/{reference}/{sample}.vcf.gz.csi"
+    shell:
+        """
+        bcftools index {input}
+        """
+
+rule vcf_to_consensus:
+    input:
+        bcf = rules.zip_vcf.output.bcf,
+        index = rules.index_bcf.output.index,
+        ref = "references/{reference}.fasta"
     output:
         consensus_genome = "consensus_genomes/{reference}/{sample}.consensus.fasta"
     shell:
         """
-        touch {output.consensus_genome}
+        cat {input.ref} | \
+            bcftools consensus {input.bcf} > \
+            {output.consensus_genome}
         """

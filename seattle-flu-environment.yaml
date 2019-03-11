@@ -4,6 +4,7 @@ channels:
   - bioconda
   - defaults
 dependencies:
+  - bcftools
   - bowtie2
   - curl
   - ncurses=6.1
@@ -11,5 +12,7 @@ dependencies:
   - python=3.6
   - samtools
   - snakemake
+  - tabix
   - trimmomatic
   - varscan
+  - vcftools

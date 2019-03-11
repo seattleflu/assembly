@@ -125,17 +125,17 @@ rule call_snps:
     output:
         vcf = "process/vcfs/{reference}/{sample}.vcf"
     params:
-        depth = "1000000",
-        min_cov = "",
-        snp_qual_threshold = "",
-        snp_frequency = "",
+        depth = config["params"]["varscan"]["depth"],
+        min_cov = config["params"]["varscan"]["min_cov"],
+        snp_qual_threshold = config["params"]["varscan"]["snp_qual_threshold"],
+        snp_frequency = config["params"]["varscan"]["snp_frequency"],
     shell:
         """
         samtools mpileup \
             -d {params.depth} \
             {input.deduped_sam} > process/tmp.pileup \
             -f {input.reference}
-        java -jar /usr/local/bin/VarScan.v2.3.9.jar mpileup2snp \
+        varscan mpileup2snp \
             process/tmp.pileup \
             --min-coverage {params.min_cov} \
             --min-avg-qual {params.snp_qual_threshold} \

@@ -1,4 +1,4 @@
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:nucleoprotein|Symbol:NP|Segment:5|Subtype:Yamagata|Host:Human
+>yam_np|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:nucleoprotein|Symbol:NP|Segment:5|Subtype:Yamagata|Host:Human
 gtgaacttcaagtaccagtaaaagaactgaaaatcaaaatgtccaacatggatattgacggtataaacactgggacaatc
 gacaaaacaccggaagaaataacttctggaaccagtgggacaaccagaccaatcattagaccagcaacccttgccccacc
 aagcaacaaacgaacccgtaacccatccccggaaagagcaaccacaagcagtgaagatgatgtcggaaggaaaacccaaa
@@ -22,7 +22,7 @@ gatgtcaaaggaaatctactcaagatgatgaatgactcaatggctaagaaaaccagtggaaatgctttcattgggaagaa
 aatgtttcaaatatcagacaaaaacaaaaccaatcccattgaaattccaattaagcagaccatccccaatttcttctttg
 ggagggacacagcagaggattatgatgacctcgattattaaagcaacaaaatagacactataactgtgattgtctcaata
 cgtttggaatgtg
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:polymerase (basic) protein 2|Symbol:PB2|Segment:1|Subtype:Yamagata|Host:Human
+>yam_pb2|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:polymerase (basic) protein 2|Symbol:PB2|Segment:1|Subtype:Yamagata|Host:Human
 gcagaagcggagcgttttcaagatgacattggctaaaattgaattgttaaagcaactgttaagggacaatgaagccaaaa
 cagtactgaaacaaacaacagtagatcaatataacataataagaaaattcaatacatcaagaattgaaaagaacccttca
 ttaaggatgaagtgggcgatgtgttctaattttcccttggctttgaccaagggtgacatggcaaacagaatccccttgga
@@ -53,7 +53,7 @@ aatagatcaatggggaatgcagtgttggcgggttttcttgttagtggcaagtatgacccagatcttggagatttcaaaac
 cattgaagaacttgaaaagttgaaaccaggggagaaagcaaacatcttactttatcaaggaaaacccgttaaagtagtta
 aaaggaaaagatatagtgctttatccaatgacatttcacaaggaattaagagacaaagaatgacagttgagtccatgggg
 tgggccttgagctaatat
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:hemagglutinin|Symbol:HA|Segment:4|Subtype:Yamagata|Host:Human
+>yam_ha|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:hemagglutinin|Symbol:HA|Segment:4|Subtype:Yamagata|Host:Human
 atgaaggcaataattgtactactcatggtagtaacatccaacgcagatcgaatctgcactgggataacatcttcaaactc
 acctcatgtggtcaaaacagctactcaaggggaggtcaatgtgactggcgtgataccactgacaacaacaccaacaaaat
 cttattttgcaaatctcaaaggaacaaggaccagagggaaactatgcccggactgtctcaactgtacagatctggatgtg
@@ -77,7 +77,7 @@ gacctgcttagacaggatagctgctggcacctttaatgcaggagaattttctctccccacttttgattcattgaacatta
 ctgctgcatctttaaatgatgatggattggataaccatactatactgctctattactcaactgctgcttctagtttggct
 gtaacattaatgctagctatttttattgtttatatggtctccagagacaacgtttcatgctccatctgtctataaagaag
 gttaggccttgtattttcctttattgtagtgcttgtttgcttgtcatcattacaaagaaac
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:matrix protein|Symbol:MP|Segment:7|Subtype:Yamagata|Host:Human
+>yam_mp|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:matrix protein|Symbol:MP|Segment:7|Subtype:Yamagata|Host:Human
 agcagaagcacgcactttcttaaaatgtcgctgtttggagacacaattgcctacctgctttcattgacagaagatggaga
 aggcaaagcagaactagcagaaaaattacactgttggttcggtgggaaagaatttgacctagactctgccttggaatgga
 taaaaaacaaaagatgcttaactgatatacagaaagcactaattggtgcctctatctgctttttaaaacccaaagaccag
@@ -93,7 +93,7 @@ gaaaataagaataaaggggccaaataaagagacaataaacagagaggtatcaattttgagacacagttaccaaaaagaaa
 ttcaggctaaggaagcaatgaaggaagtactctctgacaacatggaagtattgagtgaccacatagtaattgaggggctt
 tctgctgaagagataataaaaatgggtgaaacagttttggaggtagaagaatcgcattaaattcaatttttactgtattt
 cttactatgcatttaagcaaattgtaatcaatgtcagc
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:neuraminidase|Symbol:NA|Segment:6|Subtype:Yamagata|Host:Human
+>yam_na|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:neuraminidase|Symbol:NA|Segment:6|Subtype:Yamagata|Host:Human
 cagaagcagagcatcttctcaaaactgaggcaaataggccaaaaatgaacaatgctaccttcaactatacaaacgttaac
 cttatttctcacatcagggggagtgttattatcactatatgtgtcagcttcattgtcatacttactatattcggatatat
 tgctaaaattttcacgaacagaagtaactgcaccaataatgccattggattgtgcaaacgcatcaaatgttcaggctgtg
@@ -114,7 +114,7 @@ ctttggcttcgaaataaaagataagaaatgtgatgtcccctgtattgggatagaaatggtacatgatggtgggaaaacga
 cttggcactcagcggcaacagccatttactgtttaatgggctcaggacaactgctgtgggacactgtcacaggtgttaat
 atgactctgtaatggaggaatggttgagtctgttctaaaccctttgttcctattttgtttgaacaattgtccttactgaa
 cttgattgtttctgaaaaatgctcttgttactact
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:nonstructural protein|Symbol:NS|Segment:8|Subtype:Yamagata|Host:Human
+>yam_ns|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:nonstructural protein|Symbol:NS|Segment:8|Subtype:Yamagata|Host:Human
 ctggcaaacaggaaaaaatggcggacaatatgaccacaacacaaattgaggtgggtccgggagcaaccaatgccaccata
 aacttcgaagcaggaattctggagtgctatgaaagactttcatggcaaagggcccttgactaccctggtcaagaccgtct
 aaacagactaaagaggaaattagagtcaagaataaagactcacaacaaaagtgagcctgaaagtaaaaggatgtctcttg
@@ -128,7 +128,7 @@ atggccatcggatcctcaattcactcttcgagcgtcttaatgaaggacattcaaagccaattcgagcagctgaaactgcg
 gtgggagtcttatcccaatttggtcaagagcaccgattatcaccagaagagggagacaattagactggtcacggaagaac
 tttatcttttaagtaaaagaattgatgataacatattgttccacaaaacagtaatagctaacagctccataatagctgac
 atggttgtatcattatcattattagaaacattgtatgaaatgaaggatgtggttgaagtgtacagcaggcagtgctt
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:polymerase (acidic) protein|Symbol:PA|Segment:3|Subtype:Yamagata|Host:Human
+>yam_pa|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:polymerase (acidic) protein|Symbol:PA|Segment:3|Subtype:Yamagata|Host:Human
 agcagaagcggagcgtttgatttgtcataatggatacttttattacaagaaacttccagactacaataatacaaaaggcc
 aaaaacacaatggcagaatttagtgaagatcctgaattgcaaccagcaatgctattcaacatctgtgtccatctagaggt
 ttgctatgtaataagtgacatgaattttcttgacgaagaaggaaaagcatatacagcattagaaggacaagggaaagaac
@@ -157,7 +157,7 @@ aagcactaagagtaatatttactaaatgtttgatgcactatgtatttggaaatgcccagttggagggattcagtgccgag
 tctaggagacttctactgttgattcaagcattaaaggacagaaagggcccttgggtgttcgacttagagggaatgtattc
 tggaatagaagaatgtatcagtaacaacccttgggtaatacagagtgcatactggttcaatgaatggttgggttttgaaa
 aggagggaagtaaagtattagaatcagtagatgaartaatggatgaatra
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:polymerase (basic) protein 1|Symbol:PB1|Segment:2|Subtype:Yamagata|Host:Human
+>yam_pb1|Organism: Influenza B virus (B/Phuket/3073/2015(yam-like))|Name:polymerase (basic) protein 1|Symbol:PB1|Segment:2|Subtype:Yamagata|Host:Human
 agcagaagcggagcctttaagatgaatataaatccgtattttctattcatagatgtacccatacaggcagcaatttcaac
 aacattcccatacaccggtgttcccccttattcccatggaacgggaacaggctacacaatagacaccgtgatcagaacac
 atgagtactcgaacaaaggaaaacagtatgtttctgacatcacagggtgtacaatgatagatccaacaaatgggccatta

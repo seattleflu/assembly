@@ -1,4 +1,4 @@
->gb:CY033036:1-1522|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:nucleoprotein|Symbol:NP|Segment:5|Subtype:H3N2|Host:Human
+>CY033036:1-1522|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:nucleoprotein|Symbol:NP|Segment:5|Subtype:H3N2|Host:Human
 gttaataatcactcactgagtgacatcaaagtcatggcgtcccaaggcaccaaacggtcttatgaacagatggaaactga
 tggagatcgccagaatgcaactgagattagggcatccgtcgggaagatgattgatggaattgggagattctacatccaaa
 tgtgcactgaacttaaactcagtgatcatgaagggcggttgatccagaacagcttgacaatagagaaaatggtactctct
@@ -19,7 +19,7 @@ aaacctcccatttgaaaagtcaaccatcatggcagcattcactggaaatacggagggaagaacttcagacatgagggcag
 aaatcataaggatgatggaaggtgcaaaaccagacgaagtgtcattccgggggaggggagttttcgagctctcagacgag
 aaggcaacgaacccgatcgtgccctcttttgatatgagtaacgaaggatcttatttcttcggagacaatgcagaagagta
 cgacaattaaggaaaaaatac
->gb:CY033039:1-2299|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:polymerase (basic) protein 2|Symbol:PB2|Segment:1|Subtype:H3N2|Host:Human
+>CY033039:1-2299|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:polymerase (basic) protein 2|Symbol:PB2|Segment:1|Subtype:H3N2|Host:Human
 tcaattatattcagtatggaaagaataaaagaactacggaatctgatgtcgcagtctcgcactcgcgagatactgacaaa
 aaccacagtggaccatatggccataattaagaagtacacatcggggagacaggaaaagaacccgtcacttaggatgaaat
 ggatgatggcaatgaaatatccaatcactgctgacaaaagggtaacagaaatggttccggagagaaatgaacaaggacaa
@@ -49,7 +49,7 @@ taaaaggctaacaattctcggaaaagatgccggcactttaattgaagacccagatgaaagcacatccggagtggagtccg
 ccgtcttgagagggttcctcattataggtaaagaagacagaagatacggacctgcattaagcatcaatgaactgagtaac
 cttgcaaaaggagaaaaggctaatgtgctaattgggcaaggagacgtggtgttggtaatgaaacgaaaacgggactctag
 tatacttactgacagccagacagcgaccaaaagaattcggatggccatcaattaatactgaatagtttaaaaacga
->gb:CY033033:1-1719|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:hemagglutinin|Symbol:HA|Segment:4|Subtype:H3N2|Host:Human
+>CY033033:1-1719|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:hemagglutinin|Symbol:HA|Segment:4|Subtype:H3N2|Host:Human
 ggataattctattaaccatgaagactatcattgctttgagctacattctatgtctggttttcgctcaaaaaattcctgga
 aatgacaatagcacggcaacgctgtgccttgggcaccatgcagtaccaaacggaacgatagtgaaaacaatcacgaatga
 ccgaattgaagttactaatgctactgagctggttcagaattcctcaataggtgaaatatgcgacagtcctcatcagatcc
@@ -72,7 +72,7 @@ ctgaggatatgggcaatggttgtttcaaaatataccacaaatgtgacaatgcctgcataggatcaataagaaatggaact
 tatgaccacaatgtgtacagggatgaagcattaaacaaccggttccagatcaagggagttgagctgaagtcagggtacaa
 agattggatcctatggatttcctttgccatatcatgttttttgctttgtgttgctttgttggggttcatcatgtgggcct
 gccaaaagggcaacattaggtgcaacatttgcatttgagtgcattaattaaaaacac
->gb:CY033034:1-983|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:matrix protein|Symbol:MP|Segment:7|Subtype:H3N2|Host:Human
+>CY033034:1-983|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:matrix protein|Symbol:MP|Segment:7|Subtype:H3N2|Host:Human
 tagatattgaaagatgagccttctaaccgaggtcgaaacgtatgttctctctatcgttccatcaggccccctcaaagccg
 agatcgcgcagagacttgaagatgtctttgctgggaaaaacacagatcttgaggctctcatggaatggctaaagacaaga
 ccaattctgtcacctttgactaaggggattttagggtttgttttcacgctcaccgtgcccagtgagcgaggactgcagcg
@@ -86,7 +86,7 @@ tttgcagacctatcagaaacgaatgggggtgcagatgcaacgattcaagtgacccgcttgttgttgccgcgaatatcatt
 gggatcttgcacttgatattgtggattcttgatcgtctttttttcaaatgcgtctatcgactcttcaaacacggccttaa
 aagaggcccttctacggaaggagtacctgagtctatgagggaagaatatcgaaaggaacagcagaatgctgtggatgctg
 acgacagtcattttgtcagcatagagttggagtaaaaaacta
->gb:CY033035:1-1431|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:neuraminidase|Symbol:NA|Segment:6|Subtype:H3N2|Host:Human
+>CY033035:1-1431|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:neuraminidase|Symbol:NA|Segment:6|Subtype:H3N2|Host:Human
 agtaaagatgaatccaaatcaaaagataataacgattggctctgtttctctcaccatttccacaatatgcttcttcatgc
 aaattgccattttgataactactgtaacattgcatttcaagcaatatgaattcaactcccccccaaacaaccaagtgatg
 ctgtgtgaaccaacaataatagaaagaaacataacagaaatagtgtatttaactaacaccaccatagagaaggaaatatg
@@ -106,7 +106,7 @@ tgacagaggtgataggtccggttattctggtattttctctgttgaaggcaaaagctgcatcaatcggtgcttttatgtgg
 agttgattaggggaagaaaagaggaaactgaagtcttgtggacctcaaacagtattgttgtgttttgtggcacctcaggt
 acatatggaacaggctcatggcctgatggggcggacctcaatctcatgcctatataagctttcgcaattttagaaaaaac
 t
->gb:CY033037:1-844|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:Non-structural protein|Symbol:NS|Segment:8|Subtype:H3N2|Host:Human
+>CY033037:1-844|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:Non-structural protein|Symbol:NS|Segment:8|Subtype:H3N2|Host:Human
 gtgacaaagacataatggattccaacactgtgtcaagtttccaggtagattgctttctttggcatatccggaaacaagtt
 gtagaccaaaaactgagtgatgccccattccttgatcggcttcgccgagatcagaggtccctaaggggaagaggcaatac
 tctcggtttagacatcaaagcagccacccatgttggaaagcaaattgtagaaaagattctgaaagaagaatctaatgagg
@@ -118,7 +118,7 @@ ggaggacttgaatggaatgataacacagttcgagtctctaaaaatctacagagattcgcttggagaagcagtaatgagaa
 tgggggacctccacttactccaaaacagaaacgggaaatggcgagaacagctaggtcagaagtttgaagagataagatgg
 ctaattgaagaagtgagacacagattaagaacaactgaaaatagctttgaacaaataacattcatgcaagcattacaact
 gctgtttgaagtggaacaggagataagaaccttctcatttcagcttatttaatgataaaaaacac
->gb:CY033038:1-2189|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:polymerase (active) protein|Symbol:PA|Segment:3|Subtype:H3N2|Host:Human
+>CY033038:1-2189|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|Name:polymerase (active) protein|Symbol:PA|Segment:3|Subtype:H3N2|Host:Human
 tactgattcaaaatggaagattttgtgcgacaatgcttcaacccgatgattgtcgaacttgcagaaaaagcaatgaaaga
 gtatggggaggatctgaaaattgaaaccaacaaatttgcagcaatatgcactcacttggaggtctgtttcatgtattcag
 atttccatttcatcaatgaacaaggcgaatcaatagtagtagaacttgacgatccaaatgcactgttaaagcacagattt
@@ -147,7 +147,7 @@ tgtaggactctattggctaagtcagtattcaatagcctgtatgcatcaccacaattggaaggattttcagcggagtcaag
 aaaactgctccttattgttcaggctcttagggacaagcttgaacctgggacctttgatcttggggggctatatgaagcaa
 ttgaggagtgcctgattaatgatccctgggttttgctcaatgcgtcttggttcaactccttcctgacacatgcattaaaa
 tagttatagcagtgctactatttgttatccgtactgtccaaaaaaagta
->gb:CY033040:1-2296|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|polymerase (basic) protein 1|Symbol:PB1|Segment:2|Subtype:H3N2|Host:Human
+>CY033040:1-2296|Organism: Influenza A virus (A/Hong Kong/4801/2014(H3N2))|polymerase (basic) protein 1|Symbol:PB1|Segment:2|Subtype:H3N2|Host:Human
 caaaccatttgaatggatgtcaatccgactctactgttcttaaaagttccagcgcaaaatgccataagcacaacattccc
 ttatactggagatcctccatacagccatggaacagggacagggtacactatggacacagtcaacagaacacaccaatact
 cagagagggggaagtggacgacaaatacagaaactggggcgccccagctcaacccaattgatggaccactacctgaggat

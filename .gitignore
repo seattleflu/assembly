@@ -3,6 +3,8 @@ test_data/
 summary/
 process/
 data/
+references/*.bt2
+references/*.fai
 
 .snakemake
 __pycache__

@@ -1,4 +1,4 @@
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:nucleoprotein|Symbol:NP|Segment:5|Subtype:Victoria|Host:Human
+>vic_np|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:nucleoprotein|Symbol:NP|Segment:5|Subtype:Victoria|Host:Human
 attttcttgtgaacttcgagcaccagtaaaagaactgaaaatcaaaatgtccaacatggatatcgacggtatgaacactg
 ggacaattgacaaaacaccggaagaaataacttctggaaccagtgggacaaccagaccaataattagaccagcaaccctt
 gccccaccaagcaacaaacgaacccgtaacccatccccggaaggagcaaccacaagcagtgaagatgatgtcggaaggaa
@@ -22,7 +22,7 @@ gtgatgcagatgtcaaaggaaatctactcaagatgatgaatgactcaatggctaagaaaaccagtggaaatgctttcatt
 gggaagaaaatgtttcaaatatcagacaaaaacaaaaccaatcccattgaaattccaattaagcagaccatccccaattt
 cttctttgggagggacacagcagaggattatgatgacctcgattattaaatcaacaaaatagacactatgactgtgattg
 tttcaatacgtttggaatgtgggtgtttattctcattaaaataaatataaaaaat
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:polymerase (basic) protein 2|Symbol:PB2|Segment:1|Subtype:Victoria|Host:Human
+>vic_pb2|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:polymerase (basic) protein 2|Symbol:PB2|Segment:1|Subtype:Victoria|Host:Human
 gttttcaagatgacattagccaaaattgaattgttaaaacaactgctaagggacaatgaggccaaaacagttttgaagca
 aacaacagtagaccaatataacataataagaaaattcaatacatcgaggattgaaaagaatccttcactaaggatgaagt
 gggccatgtgttctaactttcccttggctctaaccaagggcgatatggcaaacagaatccccttggaatacaaagggata
@@ -53,7 +53,7 @@ ggaatgcagtattagcaggctttctcgttagtggcaagtatgacccagatcttggagatttcaaaactattgaagaactt
 gaaaagctgaaaccaggggaaaaggcaaacatcttgctttatcaaggaaaaccagttaaagtagtgaaaaggaaaaggta
 tagtgctttgtccaatgacatttcacaaggaattaagagacaaagaatgacagttgagtctatggggtgggccttgagct
 aatataaatttatccattaattcaatgaacgcagttgagtgaaaaat
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:hemagglutinin|Symbol:HA|Segment:4|Subtype:Victoria|Host:Human
+>vic_ha|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:hemagglutinin|Symbol:HA|Segment:4|Subtype:Victoria|Host:Human
 attttctaatatccacaaaatgaaggcaataattgtactactcatggtagtaacatccaatgcagatcgaatctgcactg
 ggataacatcgtcaaactcaccacatgtcgtcaaaactgctactcaaggggaggtcaatgtgaccggtgtaataccactg
 acaacaacacccaccaaatctcattttgcaaatctcaaaggaacagaaaccagggggaaactatgcccaaaatgcctcaa
@@ -78,7 +78,7 @@ acctttgattcactgaatattactgctgcatctttaaatgacgatggattggataatcatactatactgctttactactc
 aactgctgcctccagtttggctgtaacactgatgatagctatctttgttgtttatatggtctccagagacaatgtttctt
 gctccatttgtctataaggaaagttaagccttgtattttcctttattgtagtgcttgtttgcttgttgtcattacaaaga
 aacgttattgaaaaat
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:matrix protein|Symbol:MP|Segment:7|Subtype:Victoria|Host:Human
+>vic_mp|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:matrix protein|Symbol:MP|Segment:7|Subtype:Victoria|Host:Human
 tcttaaaatgtcgctgtttggagacacaattgcctacttgctttcattgacagaagatggagaaggcaaagcagaactag
 cagaaaagttacactgttggtttggtgggaaagaatttgacctagactcagccttggaatggataaaaaacaaaagatgc
 ttaactgatatacaaaaagcactaattggtgcctctatatgctttttaaaacccaaagaccaggaaagaaaaagaagatt
@@ -94,7 +94,7 @@ gtccaaacaaagagacaataaacagagaggtatcaattttgagacacagttaccaaaaagaaatccaggccaaagaaaca
 atgaaggaagtgctctctgacaacatggaggtattgaatgaccacataataattgaggggctttctgccgaagagataat
 aaaaatgggtgaaacagttttggagatagaagaattgcattaaattcaattttactgtatttcttactatgcatttaagc
 aaattgtaatcaatgtcagcaaataaactggaaa
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:neuraminidase|Symbol:NA|Segment:6|Subtype:Victoria|Host:Human
+>vic_na|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:neuraminidase|Symbol:NA|Segment:6|Subtype:Victoria|Host:Human
 atcttctcaaaactgaagcaaataggccaaaaatgaacaatgctaccttcaactatacaaacgttaaccctatttctcac
 atcagggggagtattattatcactatatgtgtcagcttcattatcatacttactatattcggatatattgctaaaattct
 caccaacagaaataactgcaccaacaatgccattggattgtgcaaacgcatcaaatgttcaggctgtgaaccgctctgca
@@ -115,7 +115,7 @@ aataaaagataagaaatgcgatgtcccctgtattgggatagagatggtacatgatggtggaaaagagacttggcactcag
 cagcaacagccatttactgtttaatgggctcaggacagctgctgtgggacactgtcacaggtgttgacatggctctgtaa
 tggaggagtggttaagtctgttctaaaccctttgttcctattttgtttgaacaattgtccttactaaacttaattgtttc
 tgaaaaat
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:nonstructural protein|Symbol:NS|Segment:8|Subtype:Victoria|Host:Human
+>vic_ns|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:nonstructural protein|Symbol:NS|Segment:8|Subtype:Victoria|Host:Human
 tgtttagtcactggcaaacagagaaaaaatggcgaacaacaacatgaccacaacacaaattgaggtgggtccgggagcaa
 ccaatgccaccataaactttgaagcaggaattctggagtgctatgaaaggctttcatggcaaagagcccttgactaccct
 ggtcaagaccgcctaaacagactaaaaagaaaattagagtcaagaataaagactcacaacaaaagtgagcctgaaagtaa
@@ -130,7 +130,7 @@ cagctgaaactgcgatgggagtcttatcccaatttggtcaagagcaccgattatcaccagaagagggagacaattagatt
 ggtcacggaagaactttatcttttaagtaaaagaattgatgataacatactattccacaaaacagtgatagctaacagct
 ccataatagctgacatggttgtatcattatcattattagaaacattgtatgaaatgaaggatgtggttgaagtgtacagc
 aggcagtgcttgtgaatttaaaataaa
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:polymerase (acidic) protein|Symbol:PA|Segment:3|Subtype:Victoria|Host:Human
+>vic_pa|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:polymerase (acidic) protein|Symbol:PA|Segment:3|Subtype:Victoria|Host:Human
 gtttgatttatcataatggatacttttattacaagaaacttccagactacaataatacaaaaggccaaaaacacaatggc
 agaatttagtgaagatcctgaattgcaaccagcaatgctattcaatatctgcgtccatctagaggtttgctatgtaataa
 gtgacatgaattttcttgacgaagaaggaaaagcatatacagcattagaaggacaagggaaagaacaaaacttgagacca
@@ -160,7 +160,7 @@ attgttgattcaagcattaaaggacagaaagggtccttgggtattcgacttagagggaatgtattctggaatagaagaat
 gtattagcaacaacccttgggtgatacagagtgtatactggttcaatgaatggttgggctttgaaaaggaggggagtaaa
 gtgttggaatcagtggatgaagtaatggatgaataaaaggaaatagtactcaatttggtactattttgttcattatgtat
 ctaaacatccaataaaaagaaacaagaatcaaaaat
->gb:XXXXXXXX:Y-YYYY|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:polymerase (basic) protein 1|Symbol:PB1|Segment:2|Subtype:Victoria|Host:Human
+>vic_pb1|Organism: Influenza B virus (B/Michigan/49/2017(vic-like))|Name:polymerase (basic) protein 1|Symbol:PB1|Segment:2|Subtype:Victoria|Host:Human
 ctttaagatgaatataaatccttattttctcttcatagatgtgcccgtacaggcagcaatttcaacaacattcccataca
 ctggtgttcccccttattcccatggaacaggaacaggttacacaatagacaccgtgatcagaacgcatgagtactcaaac
 aaggggaaacagtacatttctgatgttacaggatgcacaatggtggatccaacaaatggaccattacccgaagataatga

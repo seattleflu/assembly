@@ -30,7 +30,16 @@ def generate_sample_names(cfg):
                 sample_names.append(f)
     return sample_names
 
-all_sample_names = generate_sample_names(config)
+def generate_all_sample_names(cfg):
+    all_sample_names = []
+    for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
+        if f.endswith('.fastq.gz'):
+            f = f.split('.')[0].split('/')[-1]
+            all_sample_names.append(f)
+    return all_sample_names
+
+sample_names = generate_sample_names(config)
+all_sample_names = generate_all_sample_names(config)
 all_references = [ v for v in  config['reference_viruses'].keys() ]
 
 

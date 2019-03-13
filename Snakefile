@@ -38,18 +38,47 @@ all_references = [ v for v in  config['reference_viruses'].keys() ]
 rule all:
     input:
         consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta",
-               sample=all_sample_names,
+               sample=sample_names,
+               reference=all_references),
+        pre_fastqc = expand("summary/pre_trim_fastqc/{sample}_fastqc.html",
+               sample=all_sample_names),
+        post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
+               sample=sample_names,
+               tr=["1P", "1U", "2P", "2U"],
+               ext=["zip", "html"]),
+        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt",
+               sample=sample_names,
                reference=all_references)
-        # summary_statistics = ()
+
+rule index_reference_genome:
+    input:
+        raw_reference = "references/{reference}.fasta"
+    output:
+        indexed_reference = "references/{reference}.1.bt2"
+    shell:
+        """
+        bowtie2-build {input.raw_reference} references/{wildcards.reference}
+        """
+
+rule pre_trim_fastqc:
+    input:
+        fastq = "%s/{sample}.fastq.gz"%(config["fastq_directory"])
+    output:
+        qc = "summary/pre_trim_fastqc/{sample}_fastqc.html",
+        zip = "summary/pre_trim_fastqc/{sample}_fastqc.zip"
+    shell:
+        """
+        fastqc {input.fastq} -o summary/pre_trim_fastqc
+        """
 
 rule trim_fastqs:
     input:
         fastq = "%s/{sample}.fastq.gz"%(config["fastq_directory"])
     output:
-        trimmed_fastq_1p = "process/trimmed/{reference}/{sample}.trimmed_1P.fastq",
-        trimmed_fastq_2p = "process/trimmed/{reference}/{sample}.trimmed_2P.fastq",
-        trimmed_fastq_1u = "process/trimmed/{reference}/{sample}.trimmed_1U.fastq",
-        trimmed_fastq_2u = "process/trimmed/{reference}/{sample}.trimmed_2U.fastq"
+        trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq",
+        trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq",
+        trimmed_fastq_1u = "process/trimmed/{sample}.trimmed_1U.fastq",
+        trimmed_fastq_2u = "process/trimmed/{sample}.trimmed_2U.fastq"
     params:
         paired_end = config["params"]["trimmomatic"]["paired_end"],
         adapters = config["params"]["trimmomatic"]["adapters"],
@@ -63,10 +92,33 @@ rule trim_fastqs:
             {params.paired_end} \
             -phred33 \
             -basein {input.fastq} \
-            -baseout process/trimmed/{wildcards.reference}/{wildcards.sample}.trimmed.fastq \
+            -baseout process/trimmed/{wildcards.sample}.trimmed.fastq \
             ILLUMINACLIP:{params.adapters}:{params.illumina_clip} \
             SLIDINGWINDOW:{params.window_size}:{params.trim_qscore} \
             MINLEN:{params.minimum_length}
+        """
+
+rule post_trim_fastqc:
+    input:
+        p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
+        p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
+        u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
+        u2 = rules.trim_fastqs.output.trimmed_fastq_2u
+    output:
+        qc_1p_html = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.html",
+        qc_2p_html = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.html",
+        qc_1u_html = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.html",
+        qc_2u_html = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.html",
+        qc_1p_zip = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.zip",
+        qc_2p_zip = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
+        qc_1u_zip = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
+        qc_2u_zip = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
+    shell:
+        """
+        fastqc {input.p1} -o summary/post_trim_fastqc
+        fastqc {input.p2} -o summary/post_trim_fastqc
+        fastqc {input.u1} -o summary/post_trim_fastqc
+        fastqc {input.u2} -o summary/post_trim_fastqc
         """
 
 rule map:
@@ -74,9 +126,11 @@ rule map:
         p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
         p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
         u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
-        u2 = rules.trim_fastqs.output.trimmed_fastq_2u
+        u2 = rules.trim_fastqs.output.trimmed_fastq_2u,
+        ref_file = rules.index_reference_genome.output.indexed_reference
     output:
-        mapped_sam_file = "process/mapped/{reference}/{sample}.sam"
+        mapped_sam_file = "process/mapped/{reference}/{sample}.sam",
+        bt2_log = "summary/bowtie2/{reference}/{sample}.log"
     shell:
         """
         bowtie2 \
@@ -85,7 +139,7 @@ rule map:
             -2 {input.p2} \
             -U {input.u1},{input.u2} \
             -S {output.mapped_sam_file} \
-            --local
+            --local 2> {output.bt2_log}
         """
 
 rule sort:
@@ -99,6 +153,16 @@ rule sort:
             -bS {input.mapped_sam} | \
             samtools sort | \
             samtools view -h > {output.sorted_sam_file}
+        """
+
+rule bamstats:
+    input:
+        sorted_sam = rules.sort.output.sorted_sam_file
+    output:
+        bamstats_file = "summary/bamstats/{reference}/{sample}.coverage_stats.txt"
+    shell:
+        """
+        bamstats -i {input.sorted_sam} > {output.bamstats_file}
         """
 
 rule remove_duplicate_reads:

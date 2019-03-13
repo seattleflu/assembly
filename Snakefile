@@ -118,25 +118,35 @@ rule remove_duplicate_reads:
             M={params.picard_params}
         """
 
-rule call_snps:
+rule pileup:
     input:
         deduped_sam = rules.remove_duplicate_reads.output.deduped,
         reference = "references/{reference}.fasta"
     output:
+        pileup = "process/mpileup/{reference}/{sample}.pileup"
+    params:
+        depth = config["params"]["mpileup"]["depth"]
+    shell:
+        """
+        samtools mpileup \
+            -d {params.depth} \
+            {input.deduped_sam} > {output.pileup} \
+            -f {input.reference}
+        """
+
+rule call_snps:
+    input:
+        pileup = rules.pileup.output.pileup
+    output:
         vcf = "process/vcfs/{reference}/{sample}.vcf"
     params:
-        depth = config["params"]["varscan"]["depth"],
         min_cov = config["params"]["varscan"]["min_cov"],
         snp_qual_threshold = config["params"]["varscan"]["snp_qual_threshold"],
         snp_frequency = config["params"]["varscan"]["snp_frequency"],
     shell:
         """
-        samtools mpileup \
-            -d {params.depth} \
-            {input.deduped_sam} > process/tmp.pileup \
-            -f {input.reference}
         varscan mpileup2snp \
-            process/tmp.pileup \
+            {input.pileup} \
             --min-coverage {params.min_cov} \
             --min-avg-qual {params.snp_qual_threshold} \
             --min-var-freq {params.snp_frequency} \

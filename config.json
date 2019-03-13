@@ -23,9 +23,12 @@
           "trim_qscore" : "30",
           "minimum_length" : "10"
         },
+      "mpileup" :
+        {
+          "depth" : "1000000"
+        },
       "varscan" :
         {
-          "depth" : "1000000",
           "min_cov" : "10",
           "snp_qual_threshold" : "30",
           "snp_frequency" : "0.50"

@@ -1,0 +1,62 @@
+{
+  "fastq_directory" :
+    "data/5March2019",
+  "reference_viruses" :
+    {
+      "h1n1pdm" :
+        {
+          "name" : "A/California/04/2009",
+          "length" : 14552
+        },
+      "h3n2" :
+        {
+          "name" : "A/HongKong/4801/2014",
+          "length" : 13472
+        },
+      "vic" :
+        {
+          "name" : "B/Michigan/49/2017",
+          "length" : 14403
+        },
+      "yam" :
+        {
+          "name" : "B/Phuket/3073/2013",
+          "length" : 14175
+        },
+      "1934h1n1" : {},
+      "2004h3n2" : {},
+      "coronavirus229E" : {},
+      "coronavirusHKU1" : {},
+      "coronavirusNL63" : {},
+      "coronavirusOC43" : {},
+      "h2n2" : {},
+      "h5n1" : {},
+      "h7n9" : {},
+      "h9n2" : {},
+      "influenzaB" : {},
+      "rsvA" : {},
+      "rsvB" : {}
+    },
+  "params" :
+    {
+      "trimmomatic" :
+        {
+          "paired_end" : "PE",
+          "adapters" : "TruSeq3-PE.fa",
+          "illumina_clip" : "1:30:10",
+          "window_size" : "5",
+          "trim_qscore" : "30",
+          "minimum_length" : "10"
+        },
+      "mpileup" :
+        {
+          "depth" : "1000000"
+        },
+      "varscan" :
+        {
+          "min_cov" : "10",
+          "snp_qual_threshold" : "30",
+          "snp_frequency" : "0.50"
+        }
+    }
+}

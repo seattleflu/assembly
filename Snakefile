@@ -18,7 +18,7 @@ https://github.com/lmoncla/illumina_pipeline
 """
 import sys, os
 import glob
-configfile: "config.json"
+configfile: "config/config.json"
 
 #### Helper functions and variable def'ns
 def generate_sample_names(cfg):

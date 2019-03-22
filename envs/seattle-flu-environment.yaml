@@ -10,6 +10,7 @@ dependencies:
   - bowtie2
   - curl
   - fastqc
+  - jupyterlab
   - ncurses=6.1
   - picard
   - python=3.6

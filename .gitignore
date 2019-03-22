@@ -15,3 +15,4 @@ references/*.fai
 # Generated files
 .snakemake
 __pycache__
+.ipynb_checkpoints

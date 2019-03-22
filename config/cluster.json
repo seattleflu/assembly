@@ -1,0 +1,11 @@
+{
+    "__default__": {
+        "time" : "00:15:00",
+        "cores" : 1,
+        "memory": "512",
+        "disk": "6000",
+        "name": "{rule}.{wildcards}",
+        "stdout": "log/cluster/{rule}.{wildcards}.%j.out",
+        "stderr": "log/cluster/{rule}.{wildcards}.%j.err"
+    }
+}

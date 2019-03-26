@@ -21,43 +21,43 @@ import glob
 configfile: "config/config.json"
 
 #### Helper functions and variable def'ns
-def generate_sample_names(cfg):
-    sample_names = []
+def generate_sample_ids(cfg):
+    """Return all the sample names (i.e. S04) as a list.
+    """
+    all_ids = set()
     for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
         if f.endswith('.fastq.gz'):
-            if "R1" in f:
-                f = f.split('.')[0].split('/')[-1]
-                sample_names.append(f)
-    return sample_names
+            f = f.split('.')[0].split('/')[-1].split('_')[1]
+            all_ids.add(f)
+    return all_ids
 
-def generate_all_sample_names(cfg):
-    all_sample_names = []
-    for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
-        if f.endswith('.fastq.gz'):
-            f = f.split('.')[0].split('/')[-1]
-            all_sample_names.append(f)
-    return all_sample_names
+def generate_all_files(sample, config):
+    """For a given sample, determine all fastqs as a tuple of forward
+    and reverse
+    """
+    r1 = glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample))
+    r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
+    return (r1, r2)
 
-sample_names = generate_sample_names(config)
-all_sample_names = generate_all_sample_names(config)
 all_references = [ v for v in  config['reference_viruses'].keys() ]
-
+all_ids = generate_sample_ids(config)
+mapped = {id: generate_all_files(id, config) for id in all_ids}
 
 #### Main pipeline
 rule all:
     input:
         consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta",
-               sample=sample_names,
+               sample=all_ids,
                reference=all_references),
-        pre_fastqc = expand("summary/pre_trim_fastqc/{sample}_fastqc.html",
-               sample=all_sample_names),
-        post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
-               sample=sample_names,
-               tr=["1P", "1U", "2P", "2U"],
-               ext=["zip", "html"]),
-        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt",
-               sample=sample_names,
-               reference=all_references)
+        # pre_fastqc = expand("summary/pre_trim_fastqc/{sample}_fastqc.html",
+        #        sample=all_sample_filenames),
+        # post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
+        #        sample=sample_filenames,
+        #        tr=["1P", "1U", "2P", "2U"],
+        #        ext=["zip", "html"]),
+        # bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt",
+        #        sample=all_ids,
+        #        reference=all_references)
 
 rule index_reference_genome:
     input:
@@ -67,6 +67,21 @@ rule index_reference_genome:
     shell:
         """
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
+        """
+
+
+
+rule merge_lanes:
+    input:
+        all_r1 = lambda wildcards: mapped[wildcards.sample][0],
+        all_r2 = lambda wildcards: mapped[wildcards.sample][1]
+    output:
+        merged_r1 = "process/merged/{sample}_R1.fastq.gz",
+        merged_r2 = "process/merged/{sample}_R2.fastq.gz"
+    shell:
+        """
+        cat {input.all_r1} >> {output.merged_r1}
+        cat {input.all_r2} >> {output.merged_r2}
         """
 
 rule pre_trim_fastqc:
@@ -82,7 +97,8 @@ rule pre_trim_fastqc:
 
 rule trim_fastqs:
     input:
-        fastq = "%s/{sample}.fastq.gz"%(config["fastq_directory"])
+        fastq_f = "process/merged/{sample}_R1.fastq.gz",
+        fastq_r = "process/merged/{sample}_R2.fastq.gz"
     output:
         trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq",
         trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq",
@@ -100,7 +116,7 @@ rule trim_fastqs:
         trimmomatic \
             {params.paired_end} \
             -phred33 \
-            -basein {input.fastq} \
+            {input.fastq_f} {input.fastq_r} \
             -baseout process/trimmed/{wildcards.sample}.trimmed.fastq \
             ILLUMINACLIP:{params.adapters}:{params.illumina_clip} \
             SLIDINGWINDOW:{params.window_size}:{params.trim_qscore} \

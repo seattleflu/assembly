@@ -3,39 +3,62 @@
     "data/5March2019",
   "reference_viruses" :
     {
-      "h1n1pdm" :
-        {
-          "name" : "A/California/04/2009",
-          "length" : 14552
-        },
-      "h3n2" :
-        {
-          "name" : "A/HongKong/4801/2014",
-          "length" : 13472
-        },
-      "vic" :
-        {
-          "name" : "B/Michigan/49/2017",
-          "length" : 14403
-        },
-      "yam" :
-        {
-          "name" : "B/Phuket/3073/2013",
-          "length" : 14175
-        },
-      "1934h1n1" : {},
-      "2004h3n2" : {},
-      "coronavirus229E" : {},
-      "coronavirusHKU1" : {},
-      "coronavirusNL63" : {},
-      "coronavirusOC43" : {},
-      "h2n2" : {},
+      "1940influenzaB" : {},
+      "h3n2_NewYork_392_2004" : {},
+      "adenovirus1" : {},
+      "h3n2_Texas_50_2012" : {},
+      "adenovirus35" : {},
       "h5n1" : {},
+      "adenovirus5" : {},
       "h7n9" : {},
+      "adenovirus54" : {},
       "h9n2" : {},
-      "influenzaB" : {},
+      "adenovirus7" : {},
+      "influenzaB_Brisbane_60_2008" : {},
+      "adenovirusB1" : {},
+      "influenzaB_Wisconsin_1_2010" : {},
+      "adenovirusB2" : {},
+      "influenzaC" : {},
+      "adenovirusC" : {},
+      "measles" : {},
+      "adenovirusD_AC_000006" : {},
+      "mers" : {},
+      "adenovirusD_NC_010956" : {},
+      "metapneumovirus" : {},
+      "adenovirusE" : {},
+      "mumps" : {},
+      "adenovirusF" : {},
+      "bocavirus2" : {},
+      "parainfluenzavirus1" : {},
+      "bocavirus2C" : {},
+      "parainfluenzavirus2" : {},
+      "bocavirus3" : {},
+      "parainfluenzavirus3" : {},
+      "bocavirus4" : {},
+      "parainfluenzavirus4A" : {},
+      "coronavirus229E" : {},
+      "parainfluenzavirus5" : {},
+      "coronavirusHKU1" : {},
+      "parechovirus" : {},
+      "coronavirusNL63" : {},
+      "primatebocaparvovirus1" : {},
+      "coronavirusOC43" : {},
+      "rhinovirus14" : {},
+      "enterovirusA" : {},
+      "rhinovirus89" : {},
+      "enterovirusB" : {},
+      "rhinovirusC" : {},
+      "enterovirusD" : {},
       "rsvA" : {},
-      "rsvB" : {}
+      "h1n1_PuertoRico_8_1934" : {},
+      "rsvB" : {},
+      "h1n1pdm_California_04_2009" : {},
+      "sars" : {},
+      "h1n1pdm_Michigan_45_2015" : {},
+      "vic_Michigan_49_2017" : {},
+      "h2n2" : {},
+      "yam_Phuket_3073_2015" : {},
+      "h3n2_HongKong_4801_2014"
     },
   "params" :
     {

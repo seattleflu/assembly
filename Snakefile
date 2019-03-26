@@ -187,7 +187,7 @@ rule bamstats:
         bamstats_file = "summary/bamstats/{reference}/{sample}.coverage_stats.txt"
     shell:
         """
-        bamstats -i {input.sorted_sam} > {output.bamstats_file}
+        BAMStats -i {input.sorted_sam} > {output.bamstats_file}
         """
 
 rule remove_duplicate_reads:

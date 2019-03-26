@@ -76,15 +76,15 @@ rule all:
         consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta",
                sample=all_ids,
                reference=all_references),
-        # pre_fastqc = expand("summary/pre_trim_fastqc/{sample}_fastqc.html",
-        #        sample=all_sample_filenames),
-        # post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
-        #        sample=sample_filenames,
-        #        tr=["1P", "1U", "2P", "2U"],
-        #        ext=["zip", "html"]),
-        # bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt",
-        #        sample=all_ids,
-        #        reference=all_references)
+        # pre_fastqc = expand("summary/pre_trim_fastqc/{fname}_fastqc.html",
+        #        fname=glob.glob(config['fastq_directory']),
+        post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
+               sample=all_ids,
+               tr=["1P", "1U", "2P", "2U"],
+               ext=["zip", "html"]),
+        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt",
+               sample=all_ids,
+               reference=all_references)
 
 rule index_reference_genome:
     input:
@@ -110,17 +110,17 @@ rule merge_lanes:
         cat {input.all_r1} >> {output.merged_r1}
         cat {input.all_r2} >> {output.merged_r2}
         """
-
-rule pre_trim_fastqc:
-    input:
-        fastq = "%s/{sample}.fastq.gz"%(config["fastq_directory"])
-    output:
-        qc = "summary/pre_trim_fastqc/{sample}_fastqc.html",
-        zip = "summary/pre_trim_fastqc/{sample}_fastqc.zip"
-    shell:
-        """
-        fastqc {input.fastq} -o summary/pre_trim_fastqc
-        """
+# Ignored for the time being
+# rule pre_trim_fastqc:
+#     input:
+#         all_fastq = lambda wildcards: mapped[wildcards.sample][0]+mapped[wildcards.sample][1]
+#     output:
+#         qc = "summary/pre_trim_fastqc/{sample}_fastqc.html",
+#         zip = "summary/pre_trim_fastqc/{sample}_fastqc.zip"
+#     shell:
+#         """
+#         fastqc {input.all_fastq} -o summary/pre_trim_fastqc
+#         """
 
 rule trim_fastqs:
     input:

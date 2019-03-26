@@ -1,16 +1,43 @@
 """Snakefile
 
-Processes input fastq files to create consensus genomes and their associated summary statistics for the Seattle Flu Study.
+Processes input fastq files to create consensus genomes and their associated
+summary statistics for the Seattle Flu Study.
 
-To run:
-    $ snakemake
+Install and activate the appropriate environment for the pipeline using
+Conda (https://conda.io/en/latest/):
+    $ conda env create -f envs/seattle-flu-environment.yaml
+    $ conda activate seattle-flu
+
+Before running perform a dry-run to test that all input files are correctly
+located and that the Snakemake DAG builds correctly:
+    $ snakemake -n
+
+To run on a local machine:
+    $ snakemake -k
+
+To run on the Fred Hutch cluster (Rhino):
+    $ snakemake \
+        -w 60 \
+        --cluster-config config/cluster.json \
+        --cluster "sbatch \
+            --nodes=1 \
+            --tasks=1 \
+            --mem={cluster.memory} \
+            --cpus-per-task={cluster.cores} \
+            --tmp={cluster.disk} \
+            --time={cluster.time} \
+            -o all_output.out" \
+        -j 20 \
+        -k
 
 Basic steps:
     1. Trim raw fastq's with Trimmomatic
-    2. Map trimmed reads to each reference genomes in the reference panel using bowtie2 # This step may change with time
-    3. Remove duplicate reads using Picard
+    2. Map trimmed reads to each reference genomes in the reference panel using
+       bowtie2 # This step may change with time
+    ~3. Remove duplicate reads using Picard~
     4. Call SNPs using varscan
-    5. Use SNPs to generate full consensus genomes for each sample x reference virus combination
+    5. Use SNPs to generate full consensus genomes for each sample x reference
+       virus combination
     6. Compute summary statistics for each sample x refernce virus combination
 
 Adapted from Louise Moncla's illumina pipeline for influenza snp calling:

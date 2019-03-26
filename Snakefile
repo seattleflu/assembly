@@ -66,6 +66,7 @@ def generate_all_files(sample, config):
     r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
     return (r1, r2)
 
+# Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
 all_ids = generate_sample_ids(config)
 mapped = {id: generate_all_files(id, config) for id in all_ids}

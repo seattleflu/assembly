@@ -217,26 +217,28 @@ rule bamstats:
         BAMStats -i {input.sorted_sam} > {output.bamstats_file}
         """
 
-rule remove_duplicate_reads:
-    input:
-        sorted_sam = rules.sort.output.sorted_sam_file
-    output:
-        deduped = "process/deduped/{reference}/{sample}.nodups.sam"
-    params:
-        picard_params = "summary/file.params.txt"
-    shell:
-        """
-        picard \
-            MarkDuplicates \
-            I={input.sorted_sam} \
-            O={output.deduped} \
-            REMOVE_DUPLICATES=true \
-            M={params.picard_params}
-        """
+# Removed Picard because it was too computationally intensive.
+# Uncomment and fix inputs of pileup to re-add
+# rule remove_duplicate_reads:
+#     input:
+#         sorted_sam = rules.sort.output.sorted_sam_file
+#     output:
+#         deduped = "process/deduped/{reference}/{sample}.nodups.sam"
+#     params:
+#         picard_params = "summary/file.params.txt"
+#     shell:
+#         """
+#         picard \
+#             MarkDuplicates \
+#             I={input.sorted_sam} \
+#             O={output.deduped} \
+#             REMOVE_DUPLICATES=true \
+#             M={params.picard_params}
+#         """
 
 rule pileup:
     input:
-        deduped_sam = rules.remove_duplicate_reads.output.deduped,
+        sorted_sam = rules.sort.output.sorted_sam_file,
         reference = "references/{reference}.fasta"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
@@ -246,7 +248,7 @@ rule pileup:
         """
         samtools mpileup \
             -d {params.depth} \
-            {input.deduped_sam} > {output.pileup} \
+            {input.sorted_sam} > {output.pileup} \
             -f {input.reference}
         """
 

@@ -274,7 +274,7 @@ rule call_snps:
     params:
         min_cov = config["params"]["varscan"]["min_cov"],
         snp_qual_threshold = config["params"]["varscan"]["snp_qual_threshold"],
-        snp_frequency = config["params"]["varscan"]["snp_frequency"],
+        snp_frequency = config["params"]["varscan"]["snp_frequency"]
     benchmark:
         "benchmarks/{sample}_{reference}.varscan"
     shell:

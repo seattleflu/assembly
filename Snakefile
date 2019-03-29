@@ -97,8 +97,6 @@ rule index_reference_genome:
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
         """
 
-
-
 rule merge_lanes:
     input:
         all_r1 = lambda wildcards: mapped[wildcards.sample][0],
@@ -139,6 +137,8 @@ rule trim_fastqs:
         window_size = config["params"]["trimmomatic"]["window_size"],
         trim_qscore = config["params"]["trimmomatic"]["trim_qscore"],
         minimum_length = config["params"]["trimmomatic"]["minimum_length"]
+    benchmark:
+        "benchmarks/{sample}.trimmo"
     shell:
         """
         trimmomatic \
@@ -184,6 +184,8 @@ rule map:
     output:
         mapped_sam_file = "process/mapped/{reference}/{sample}.sam",
         bt2_log = "summary/bowtie2/{reference}/{sample}.log"
+    benchmark:
+        "benchmarks/{sample}_{reference}.bowtie2"
     shell:
         """
         bowtie2 \
@@ -200,6 +202,8 @@ rule sort:
         mapped_sam = rules.map.output.mapped_sam_file
     output:
         sorted_sam_file = "process/sorted/{reference}/{sample}.sorted.sam"
+    benchmark:
+        "benchmarks/{sample}_{reference}.sort"
     shell:
         """
         samtools view \
@@ -213,6 +217,8 @@ rule bamstats:
         sorted_sam = rules.sort.output.sorted_sam_file
     output:
         bamstats_file = "summary/bamstats/{reference}/{sample}.coverage_stats.txt"
+    benchmark:
+        "benchmarks/{sample}_{reference}.bamstats"
     shell:
         """
         BAMStats -i {input.sorted_sam} > {output.bamstats_file}
@@ -245,6 +251,8 @@ rule pileup:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:
         depth = config["params"]["mpileup"]["depth"]
+    benchmark:
+        "benchmarks/{sample}_{reference}.mpileup"
     shell:
         """
         samtools mpileup \
@@ -262,6 +270,8 @@ rule call_snps:
         min_cov = config["params"]["varscan"]["min_cov"],
         snp_qual_threshold = config["params"]["varscan"]["snp_qual_threshold"],
         snp_frequency = config["params"]["varscan"]["snp_frequency"],
+    benchmark:
+        "benchmarks/{sample}_{reference}.varscan"
     shell:
         """
         varscan mpileup2snp \
@@ -300,6 +310,8 @@ rule vcf_to_consensus:
         ref = "references/{reference}.fasta"
     output:
         consensus_genome = "consensus_genomes/{reference}/{sample}.consensus.fasta"
+    benchmark:
+        "benchmarks/{sample}_{reference}.consensus"
     shell:
         """
         cat {input.ref} | \

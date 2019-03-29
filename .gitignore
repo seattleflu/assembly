@@ -3,6 +3,7 @@ consensus_genomes/
 saved_output/
 summary/
 process/
+benchmarks/
 
 # Input data files
 data/

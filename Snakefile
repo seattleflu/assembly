@@ -184,6 +184,9 @@ rule map:
     output:
         mapped_sam_file = "process/mapped/{reference}/{sample}.sam",
         bt2_log = "summary/bowtie2/{reference}/{sample}.log"
+    params:
+        threads = config["params"]["bowtie2"]["threads"],
+        map_all = config["params"]["bowtie2"]["all"]
     benchmark:
         "benchmarks/{sample}_{reference}.bowtie2"
     shell:
@@ -194,6 +197,8 @@ rule map:
             -2 {input.p2} \
             -U {input.u1},{input.u2} \
             -S {output.mapped_sam_file} \
+            -P {params.threads} \
+            {params.map_all} \
             --local 2> {output.bt2_log}
         """
 

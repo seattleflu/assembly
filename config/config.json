@@ -71,6 +71,11 @@
           "trim_qscore" : "30",
           "minimum_length" : "10"
         },
+      "bowtie2" :
+        {
+          "threads" : "4",
+          "all" : "-a"
+        },
       "mpileup" :
         {
           "depth" : "1000000"

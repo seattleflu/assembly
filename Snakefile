@@ -1,16 +1,43 @@
 """Snakefile
 
-Processes input fastq files to create consensus genomes and their associated summary statistics for the Seattle Flu Study.
+Processes input fastq files to create consensus genomes and their associated
+summary statistics for the Seattle Flu Study.
 
-To run:
-    $ snakemake
+Install and activate the appropriate environment for the pipeline using
+Conda (https://conda.io/en/latest/):
+    $ conda env create -f envs/seattle-flu-environment.yaml
+    $ conda activate seattle-flu
+
+Before running perform a dry-run to test that all input files are correctly
+located and that the Snakemake DAG builds correctly:
+    $ snakemake -n
+
+To run on a local machine:
+    $ snakemake -k
+
+To run on the Fred Hutch cluster (Rhino):
+    $ snakemake \
+        -w 60 \
+        --cluster-config config/cluster.json \
+        --cluster "sbatch \
+            --nodes=1 \
+            --tasks=1 \
+            --mem={cluster.memory} \
+            --cpus-per-task={cluster.cores} \
+            --tmp={cluster.disk} \
+            --time={cluster.time} \
+            -o all_output.out" \
+        -j 20 \
+        -k
 
 Basic steps:
     1. Trim raw fastq's with Trimmomatic
-    2. Map trimmed reads to each reference genomes in the reference panel using bowtie2 # This step may change with time
-    3. Remove duplicate reads using Picard
+    2. Map trimmed reads to each reference genomes in the reference panel using
+       bowtie2 # This step may change with time
+    ~3. Remove duplicate reads using Picard~
     4. Call SNPs using varscan
-    5. Use SNPs to generate full consensus genomes for each sample x reference virus combination
+    5. Use SNPs to generate full consensus genomes for each sample x reference
+       virus combination
     6. Compute summary statistics for each sample x refernce virus combination
 
 Adapted from Louise Moncla's illumina pipeline for influenza snp calling:
@@ -18,45 +45,45 @@ https://github.com/lmoncla/illumina_pipeline
 """
 import sys, os
 import glob
-configfile: "config/config.json"
 
 #### Helper functions and variable def'ns
-def generate_sample_names(cfg):
-    sample_names = []
+def generate_sample_ids(cfg):
+    """Return all the sample names (i.e. S04) as a list.
+    """
+    all_ids = set()
     for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
         if f.endswith('.fastq.gz'):
-            if "R1" in f:
-                f = f.split('.')[0].split('/')[-1]
-                sample_names.append(f)
-    return sample_names
+            f = f.split('.')[0].split('/')[-1].split('_')[1]
+            all_ids.add(f)
+    return all_ids
 
-def generate_all_sample_names(cfg):
-    all_sample_names = []
-    for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
-        if f.endswith('.fastq.gz'):
-            f = f.split('.')[0].split('/')[-1]
-            all_sample_names.append(f)
-    return all_sample_names
+def generate_all_files(sample, config):
+    """For a given sample, determine all fastqs as a tuple of forward
+    and reverse
+    """
+    r1 = glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample))
+    r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
+    return (r1, r2)
 
-sample_names = generate_sample_names(config)
-all_sample_names = generate_all_sample_names(config)
+# Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
-
+all_ids = generate_sample_ids(config)
+mapped = {id: generate_all_files(id, config) for id in all_ids}
 
 #### Main pipeline
 rule all:
     input:
         consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta",
-               sample=sample_names,
+               sample=all_ids,
                reference=all_references),
-        pre_fastqc = expand("summary/pre_trim_fastqc/{sample}_fastqc.html",
-               sample=all_sample_names),
+        # pre_fastqc = expand("summary/pre_trim_fastqc/{fname}_fastqc.html",
+        #        fname=glob.glob(config['fastq_directory']),
         post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
-               sample=sample_names,
+               sample=all_ids,
                tr=["1P", "1U", "2P", "2U"],
                ext=["zip", "html"]),
         bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt",
-               sample=sample_names,
+               sample=all_ids,
                reference=all_references)
 
 rule index_reference_genome:
@@ -69,20 +96,34 @@ rule index_reference_genome:
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
         """
 
-rule pre_trim_fastqc:
+rule merge_lanes:
     input:
-        fastq = "%s/{sample}.fastq.gz"%(config["fastq_directory"])
+        all_r1 = lambda wildcards: mapped[wildcards.sample][0],
+        all_r2 = lambda wildcards: mapped[wildcards.sample][1]
     output:
-        qc = "summary/pre_trim_fastqc/{sample}_fastqc.html",
-        zip = "summary/pre_trim_fastqc/{sample}_fastqc.zip"
+        merged_r1 = "process/merged/{sample}_R1.fastq.gz",
+        merged_r2 = "process/merged/{sample}_R2.fastq.gz"
     shell:
         """
-        fastqc {input.fastq} -o summary/pre_trim_fastqc
+        cat {input.all_r1} >> {output.merged_r1}
+        cat {input.all_r2} >> {output.merged_r2}
         """
+# Ignored for the time being
+# rule pre_trim_fastqc:
+#     input:
+#         all_fastq = lambda wildcards: mapped[wildcards.sample][0]+mapped[wildcards.sample][1]
+#     output:
+#         qc = "summary/pre_trim_fastqc/{sample}_fastqc.html",
+#         zip = "summary/pre_trim_fastqc/{sample}_fastqc.zip"
+#     shell:
+#         """
+#         fastqc {input.all_fastq} -o summary/pre_trim_fastqc
+#         """
 
 rule trim_fastqs:
     input:
-        fastq = "%s/{sample}.fastq.gz"%(config["fastq_directory"])
+        fastq_f = "process/merged/{sample}_R1.fastq.gz",
+        fastq_r = "process/merged/{sample}_R2.fastq.gz"
     output:
         trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq",
         trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq",
@@ -95,12 +136,14 @@ rule trim_fastqs:
         window_size = config["params"]["trimmomatic"]["window_size"],
         trim_qscore = config["params"]["trimmomatic"]["trim_qscore"],
         minimum_length = config["params"]["trimmomatic"]["minimum_length"]
+    benchmark:
+        "benchmarks/{sample}.trimmo"
     shell:
         """
         trimmomatic \
             {params.paired_end} \
             -phred33 \
-            -basein {input.fastq} \
+            {input.fastq_f} {input.fastq_r} \
             -baseout process/trimmed/{wildcards.sample}.trimmed.fastq \
             ILLUMINACLIP:{params.adapters}:{params.illumina_clip} \
             SLIDINGWINDOW:{params.window_size}:{params.trim_qscore} \
@@ -140,6 +183,11 @@ rule map:
     output:
         mapped_sam_file = "process/mapped/{reference}/{sample}.sam",
         bt2_log = "summary/bowtie2/{reference}/{sample}.log"
+    params:
+        threads = config["params"]["bowtie2"]["threads"],
+        map_all = config["params"]["bowtie2"]["all"]
+    benchmark:
+        "benchmarks/{sample}_{reference}.bowtie2"
     shell:
         """
         bowtie2 \
@@ -148,6 +196,8 @@ rule map:
             -2 {input.p2} \
             -U {input.u1},{input.u2} \
             -S {output.mapped_sam_file} \
+            -P {params.threads} \
+            {params.map_all} \
             --local 2> {output.bt2_log}
         """
 
@@ -156,6 +206,8 @@ rule sort:
         mapped_sam = rules.map.output.mapped_sam_file
     output:
         sorted_sam_file = "process/sorted/{reference}/{sample}.sorted.sam"
+    benchmark:
+        "benchmarks/{sample}_{reference}.sort"
     shell:
         """
         samtools view \
@@ -169,41 +221,47 @@ rule bamstats:
         sorted_sam = rules.sort.output.sorted_sam_file
     output:
         bamstats_file = "summary/bamstats/{reference}/{sample}.coverage_stats.txt"
+    benchmark:
+        "benchmarks/{sample}_{reference}.bamstats"
     shell:
         """
-        bamstats -i {input.sorted_sam} > {output.bamstats_file}
+        BAMStats -i {input.sorted_sam} > {output.bamstats_file}
         """
 
-rule remove_duplicate_reads:
-    input:
-        sorted_sam = rules.sort.output.sorted_sam_file
-    output:
-        deduped = "process/deduped/{reference}/{sample}.nodups.sam"
-    params:
-        picard_params = "summary/file.params.txt"
-    shell:
-        """
-        picard \
-            MarkDuplicates \
-            I={input.sorted_sam} \
-            O={output.deduped} \
-            REMOVE_DUPLICATES=true \
-            M={params.picard_params}
-        """
+# Removed Picard because it was too computationally intensive.
+# Uncomment and fix inputs of pileup to re-add
+# rule remove_duplicate_reads:
+#     input:
+#         sorted_sam = rules.sort.output.sorted_sam_file
+#     output:
+#         deduped = "process/deduped/{reference}/{sample}.nodups.sam"
+#     params:
+#         picard_params = "summary/file.params.txt"
+#     shell:
+#         """
+#         picard \
+#             MarkDuplicates \
+#             I={input.sorted_sam} \
+#             O={output.deduped} \
+#             REMOVE_DUPLICATES=true \
+#             M={params.picard_params}
+#         """
 
 rule pileup:
     input:
-        deduped_sam = rules.remove_duplicate_reads.output.deduped,
+        sorted_sam = rules.sort.output.sorted_sam_file,
         reference = "references/{reference}.fasta"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:
         depth = config["params"]["mpileup"]["depth"]
+    benchmark:
+        "benchmarks/{sample}_{reference}.mpileup"
     shell:
         """
         samtools mpileup \
             -d {params.depth} \
-            {input.deduped_sam} > {output.pileup} \
+            {input.sorted_sam} > {output.pileup} \
             -f {input.reference}
         """
 
@@ -215,7 +273,9 @@ rule call_snps:
     params:
         min_cov = config["params"]["varscan"]["min_cov"],
         snp_qual_threshold = config["params"]["varscan"]["snp_qual_threshold"],
-        snp_frequency = config["params"]["varscan"]["snp_frequency"],
+        snp_frequency = config["params"]["varscan"]["snp_frequency"]
+    benchmark:
+        "benchmarks/{sample}_{reference}.varscan"
     shell:
         """
         varscan mpileup2snp \
@@ -254,6 +314,8 @@ rule vcf_to_consensus:
         ref = "references/{reference}.fasta"
     output:
         consensus_genome = "consensus_genomes/{reference}/{sample}.consensus.fasta"
+    benchmark:
+        "benchmarks/{sample}_{reference}.consensus"
     shell:
         """
         cat {input.ref} | \

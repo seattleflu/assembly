@@ -65,11 +65,11 @@
       "trimmomatic" :
         {
           "paired_end" : "PE",
-          "adapters" : "TruSeq3-PE.fa",
+          "adapters" : "illumina-adapters.fasta",
           "illumina_clip" : "1:30:10",
           "window_size" : "5",
           "trim_qscore" : "30",
-          "minimum_length" : "10"
+          "minimum_length" : "50"
         },
       "bowtie2" :
         {
@@ -82,7 +82,7 @@
         },
       "varscan" :
         {
-          "min_cov" : "10",
+          "min_cov" : "20",
           "snp_qual_threshold" : "30",
           "snp_frequency" : "0.50"
         }

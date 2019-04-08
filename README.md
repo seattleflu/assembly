@@ -6,10 +6,9 @@ First install Conda, then run:
 conda env create -f envs/seattle-flu-environment.yaml
 ```
 
-
 Running (this will be updated):
 ```
-snakemake -k
+snakemake --configfile config/config.json -k
 ```
 OR (if on Rhino)
 ```

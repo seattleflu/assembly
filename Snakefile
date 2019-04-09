@@ -181,7 +181,7 @@ rule map:
         u2 = rules.trim_fastqs.output.trimmed_fastq_2u,
         ref_file = rules.index_reference_genome.output.indexed_reference
     output:
-        mapped_sam_file = "process/mapped/{reference}/{sample}.sam",
+        mapped_bam_file = "process/mapped/{reference}/{sample}.bam",
         bt2_log = "summary/bowtie2/{reference}/{sample}.log"
     params:
         threads = config["params"]["bowtie2"]["threads"],
@@ -195,37 +195,37 @@ rule map:
             -1 {input.p1} \
             -2 {input.p2} \
             -U {input.u1},{input.u2} \
-            -S {output.mapped_sam_file} \
             -P {params.threads} \
             {params.map_all} \
-            --local 2> {output.bt2_log}
+            --local 2> {output.bt2_log} | \
+                samtools view -bSF4 - > {output.mapped_bam_file}
         """
 
 rule sort:
     input:
-        mapped_sam = rules.map.output.mapped_sam_file
+        mapped_bam = rules.map.output.mapped_bam_file
     output:
-        sorted_sam_file = "process/sorted/{reference}/{sample}.sorted.sam"
+        sorted_bam_file = "process/sorted/{reference}/{sample}.sorted.bam"
     benchmark:
         "benchmarks/{sample}_{reference}.sort"
     shell:
         """
         samtools view \
-            -bS {input.mapped_sam} | \
+            -bS {input.mapped_bam} | \
             samtools sort | \
-            samtools view -h > {output.sorted_sam_file}
+            samtools view -h > {output.sorted_bam_file}
         """
 
 rule bamstats:
     input:
-        sorted_sam = rules.sort.output.sorted_sam_file
+        sorted_bam = rules.sort.output.sorted_bam_file
     output:
         bamstats_file = "summary/bamstats/{reference}/{sample}.coverage_stats.txt"
     benchmark:
         "benchmarks/{sample}_{reference}.bamstats"
     shell:
         """
-        BAMStats -i {input.sorted_sam} > {output.bamstats_file}
+        BAMStats -i {input.sorted_bam} > {output.bamstats_file}
         """
 
 # Removed Picard because it was too computationally intensive.
@@ -249,7 +249,7 @@ rule bamstats:
 
 rule pileup:
     input:
-        sorted_sam = rules.sort.output.sorted_sam_file,
+        sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
@@ -261,7 +261,7 @@ rule pileup:
         """
         samtools mpileup \
             -d {params.depth} \
-            {input.sorted_sam} > {output.pileup} \
+            {input.sorted_bam} > {output.pileup} \
             -f {input.reference}
         """
 

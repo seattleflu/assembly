@@ -45,6 +45,7 @@ https://github.com/lmoncla/illumina_pipeline
 """
 import sys, os
 import glob
+from itertools import product
 
 #### Helper functions and variable def'ns
 def generate_sample_ids(cfg):
@@ -65,6 +66,15 @@ def generate_all_files(sample, config):
     r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
     return (r1, r2)
 
+def filter_combinator(combinator, config):
+    def filtered_combinator(*args, **kwargs):
+        for wc_comb in combinator(*args, **kwargs):
+            if wc_comb[1][1] in config["sample_reference_pairs"][wc_comb[0][1]]:
+                yield wc_comb
+    return filtered_combinator
+
+filtered_product = filter_combinator(product, config)
+
 # Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
 all_ids = generate_sample_ids(config)
@@ -73,7 +83,7 @@ mapped = {id: generate_all_files(id, config) for id in all_ids}
 #### Main pipeline
 rule all:
     input:
-        consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta",
+        consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta", filtered_product,
                sample=all_ids,
                reference=all_references),
         # pre_fastqc = expand("summary/pre_trim_fastqc/{fname}_fastqc.html",
@@ -82,9 +92,9 @@ rule all:
                sample=all_ids,
                tr=["1P", "1U", "2P", "2U"],
                ext=["zip", "html"]),
-        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt",
-               sample=all_ids,
-               reference=all_references)
+        bamstats = expand(expand("consensus_genomes/{{reference}}/{sample}.consensus.fasta",
+               sample=all_ids),
+               reference=config["sample_reference_pairs"]["S75"])
 
 rule index_reference_genome:
     input:

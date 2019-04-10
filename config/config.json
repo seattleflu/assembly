@@ -1,6 +1,10 @@
 {
   "fastq_directory" :
-    "data/5March2019",
+    "test_data",
+  "sample_reference_pairs":
+    {
+      "S75": ["h3n2_NewYork_392_2004", "h3n2_Texas_50_2012", "h3n2_HongKong_4801_2014"]
+    },
   "reference_viruses" :
     {
       "1940influenzaB" : {},

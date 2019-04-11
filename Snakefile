@@ -50,11 +50,14 @@ from itertools import product
 #### Helper functions and variable def'ns
 def generate_sample_ids(cfg):
     """Return all the sample names (i.e. S04) as a list.
+    Will ignore all samples listed under "ignored_samples" of config.
     """
     all_ids = set()
     for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
         if f.endswith('.fastq.gz'):
             f = f.split('.')[0].split('/')[-1].split('_')[1]
+            if f in cfg['ignored_samples']:
+                continue
             all_ids.add(f)
     return all_ids
 

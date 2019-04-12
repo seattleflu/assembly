@@ -86,6 +86,18 @@ def filter_combinator(combinator, config):
                 yield wc_comb
     return filtered_combinator
 
+# input function for the rule aggregate
+def aggregate_input(wildcards):
+    """
+    Returns input for rule aggregate based on output from checkpoint align_rate.
+    Currently set to generate consensus genome only if at least 1.00% overall alignment rate.
+    """
+    with open(checkpoints.align_rate.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
+        if float(f.read().strip()[:3]) < 1.00:
+            return "summary/not_mapped/{reference}/{sample}.txt"
+        else:
+            return "consensus_genomes/{reference}/{sample}.consensus.fasta"
+
 # Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
 all_ids = generate_sample_ids(config)
@@ -95,9 +107,9 @@ filtered_product = filter_combinator(product, config)
 #### Main pipeline
 rule all:
     input:
-        consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta", filtered_product,
-               sample=all_ids,
-               reference=all_references),
+        # consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta", filtered_product,
+        #        sample=all_ids,
+        #        reference=all_references),
         # pre_fastqc = expand("summary/pre_trim_fastqc/{fname}_fastqc.html",
         #        fname=glob.glob(config['fastq_directory']),
         post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
@@ -106,7 +118,10 @@ rule all:
                ext=["zip", "html"]),
         bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt", filtered_product,
                sample=all_ids,
-               reference=all_references)
+               reference=all_references),
+        aggregate = expand("summary/aggregate/{reference}/{sample}.log", filtered_product,
+                sample=all_ids,
+                reference=all_references)
 
 rule index_reference_genome:
     input:
@@ -269,10 +284,33 @@ rule bamstats:
 #             M={params.picard_params}
 #         """
 
+checkpoint align_rate:
+    input:
+        bt2_log = rules.map.output.bt2_log
+    output:
+        temp("{reference}_{sample}_align_rate.txt")
+    shell:
+        """
+        tail -n 1 {input}  > {output}
+        """
+
+rule not_mapped:
+    input: 
+        sorted_sam = rules.sort.output.sorted_sam_file,
+        reference = "references/{reference}.fasta",
+        temp = "{reference}_{sample}_align_rate.txt"
+    output:
+        not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
+    shell:
+        """
+        cat {input.temp} > {output.not_mapped}
+        """
+
 rule pileup:
     input:
         sorted_sam = rules.sort.output.sorted_sam_file,
-        reference = "references/{reference}.fasta"
+        reference = "references/{reference}.fasta",
+        temp = "{reference}_{sample}_align_rate.txt"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:
@@ -343,4 +381,14 @@ rule vcf_to_consensus:
         cat {input.ref} | \
             bcftools consensus {input.bcf} > \
             {output.consensus_genome}
+        """
+
+rule aggregate:
+    input:
+        aggregate_input
+    output:
+        "summary/aggregate/{reference}/{sample}.log"
+    shell:
+        """
+        echo "Final output: {input}" > {output}
         """

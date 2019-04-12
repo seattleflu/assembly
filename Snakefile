@@ -104,7 +104,7 @@ rule all:
                sample=all_ids,
                tr=["1P", "1U", "2P", "2U"],
                ext=["zip", "html"]),
-        bamstats = expand("consensus_genomes/{reference}/{sample}.consensus.fasta", filtered_product,
+        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt", filtered_product,
                sample=all_ids,
                reference=all_references)
 

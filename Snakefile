@@ -45,15 +45,19 @@ https://github.com/lmoncla/illumina_pipeline
 """
 import sys, os
 import glob
+from itertools import product
 
 #### Helper functions and variable def'ns
 def generate_sample_ids(cfg):
     """Return all the sample names (i.e. S04) as a list.
+    Will ignore all samples listed under "ignored_samples" of config.
     """
     all_ids = set()
     for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
         if f.endswith('.fastq.gz'):
             f = f.split('.')[0].split('/')[-1].split('_')[1]
+            if f in cfg['ignored_samples']:
+                continue
             all_ids.add(f)
     return all_ids
 
@@ -65,15 +69,33 @@ def generate_all_files(sample, config):
     r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
     return (r1, r2)
 
+def filter_combinator(combinator, config):
+    """ Custom combinatoric function to be used with expand function.
+    Only generates combination of sample and reference wildcards that are
+    listed under "sample_reference_pairs" of config file.
+    If no references are listed for a sample, will generate all possible
+    combinations with all references.
+    """
+    def filtered_combinator(*args, **kwargs):
+        for wc_comb in combinator(*args, **kwargs):
+            if wc_comb[0][1] not in config["sample_reference_pairs"]:
+                yield wc_comb
+            elif len(config["sample_reference_pairs"][wc_comb[0][1]]) == 0:
+                yield wc_comb
+            elif wc_comb[1][1] in config["sample_reference_pairs"][wc_comb[0][1]]:
+                yield wc_comb
+    return filtered_combinator
+
 # Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
 all_ids = generate_sample_ids(config)
 mapped = {id: generate_all_files(id, config) for id in all_ids}
+filtered_product = filter_combinator(product, config)
 
 #### Main pipeline
 rule all:
     input:
-        consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta",
+        consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta", filtered_product,
                sample=all_ids,
                reference=all_references),
         # pre_fastqc = expand("summary/pre_trim_fastqc/{fname}_fastqc.html",
@@ -82,7 +104,7 @@ rule all:
                sample=all_ids,
                tr=["1P", "1U", "2P", "2U"],
                ext=["zip", "html"]),
-        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt",
+        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt", filtered_product,
                sample=all_ids,
                reference=all_references)
 

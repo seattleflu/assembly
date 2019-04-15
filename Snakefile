@@ -90,10 +90,10 @@ def filter_combinator(combinator, config):
 def aggregate_input(wildcards):
     """
     Returns input for rule aggregate based on output from checkpoint align_rate.
-    Currently set to generate consensus genome only if at least 1.00% overall alignment rate.
+    Set minimum align rate in config under "min_align_rate".
     """
     with open(checkpoints.align_rate.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
-        if float(f.read().strip()[:3]) < 1.00:
+        if float(f.read().strip()[:3]) < config["min_align_rate"]:
             return "summary/not_mapped/{reference}/{sample}.txt"
         else:
             return "consensus_genomes/{reference}/{sample}.consensus.fasta"

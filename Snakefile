@@ -95,7 +95,7 @@ filtered_product = filter_combinator(product, config)
 #### Main pipeline
 rule all:
     input:
-        consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta", filtered_product,
+        consensus_genome = expand("consensus_genomes/{reference}/{sample}.masked_consensus.fasta", filtered_product,
                sample=all_ids,
                reference=all_references),
         # pre_fastqc = expand("summary/pre_trim_fastqc/{fname}_fastqc.html",
@@ -343,4 +343,37 @@ rule vcf_to_consensus:
         cat {input.ref} | \
             bcftools consensus {input.bcf} > \
             {output.consensus_genome}
+        """
+
+rule coverage_summary:
+    input:
+        sorted_sam = rules.sort.output.sorted_sam_file
+    output:
+        coverage = "summary/coverage/{reference}/{sample}.bed"
+    shell:
+        """
+        bedtools genomecov -ibam {input.sorted_sam} -bga > {output.coverage}
+        """
+
+rule low_coverage:
+    input:
+        coverage_summary = rules.coverage_summary.output.coverage
+    output:
+        low_coverage = "summary/low_coverage/{reference}/{sample}.bed"
+    params:
+        min_cov = config["params"]["varscan"]["min_cov"]
+    shell:
+        """
+        awk "\$4 < {params.min_cov} {{print \$0}}" {input.coverage_summary} > {output.low_coverage}
+        """
+
+rule mask_consensus:
+    input:
+        consensus_genome = rules.vcf_to_consensus.output.consensus_genome,
+        low_coverage = rules.low_coverage.output.low_coverage
+    output:
+        masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+    shell:
+        """
+        bedtools maskfasta -fi {input.consensus_genome} -bed {input.low_coverage} -fo {output.masked_consensus}
         """

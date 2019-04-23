@@ -8,10 +8,12 @@
   "sample_reference_pairs":
     {
       "S13": ["h3n2_NewYork_392_2004", "h3n2_Texas_50_2012", "h3n2_HongKong_4801_2014"],
-      "S69": ["h3n2_NewYork_392_2004", "h3n2_Texas_50_2012", "h3n2_HongKong_4801_2014"],
+      "S69": ["coronavirusHKU1"],
       "S76": ["h1n1_PuertoRico_8_1934", "h1n1pdm_California_04_2009", "h1n1pdm_Michigan_45_2015"],
       "S78": ["h1n1_PuertoRico_8_1934", "h1n1pdm_California_04_2009", "h1n1pdm_Michigan_45_2015"]
     },
+  "min_align_rate": 
+    1.00,
   "reference_viruses" :
     {
       "1940influenzaB" : {},

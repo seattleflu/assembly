@@ -1,5 +1,6 @@
 name: seattle-flu
 channels:
+  - r
   - conda-forge
   - bioconda
   - biobuilds
@@ -7,14 +8,20 @@ channels:
 dependencies:
   - bamstats
   - bcftools
+  - biopython
   - bowtie2
   - curl
   - fastqc
   - jupyterlab
+  - matplotlib
+  - nb_conda_kernels
   - ncurses=6.1
   - picard
   - python=3.6
+  - r-essentials
+  - rpy2
   - samtools
+  - seaborn
   - snakemake
   - tabix
   - trimmomatic

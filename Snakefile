@@ -45,15 +45,19 @@ https://github.com/lmoncla/illumina_pipeline
 """
 import sys, os
 import glob
+from itertools import product
 
 #### Helper functions and variable def'ns
 def generate_sample_ids(cfg):
     """Return all the sample names (i.e. S04) as a list.
+    Will ignore all samples listed under "ignored_samples" of config.
     """
     all_ids = set()
     for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
         if f.endswith('.fastq.gz'):
             f = f.split('.')[0].split('/')[-1].split('_')[1]
+            if f in cfg['ignored_samples']:
+                continue
             all_ids.add(f)
     return all_ids
 
@@ -65,26 +69,56 @@ def generate_all_files(sample, config):
     r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
     return (r1, r2)
 
+def filter_combinator(combinator, config):
+    """ Custom combinatoric function to be used with expand function.
+    Only generates combination of sample and reference wildcards that are
+    listed under "sample_reference_pairs" of config file.
+    If no references are listed for a sample, will generate all possible
+    combinations with all references.
+    """
+    def filtered_combinator(*args, **kwargs):
+        for wc_comb in combinator(*args, **kwargs):
+            if wc_comb[0][1] not in config["sample_reference_pairs"]:
+                yield wc_comb
+            elif len(config["sample_reference_pairs"][wc_comb[0][1]]) == 0:
+                yield wc_comb
+            elif wc_comb[1][1] in config["sample_reference_pairs"][wc_comb[0][1]]:
+                yield wc_comb
+    return filtered_combinator
+
+# input function for the rule aggregate
+def aggregate_input(wildcards):
+    """
+    Returns input for rule aggregate based on output from checkpoint align_rate.
+    Set minimum align rate in config under "min_align_rate".
+    """
+    with open(checkpoints.align_rate.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
+        if float(f.read().strip()[:3]) < config["min_align_rate"]:
+            return "summary/not_mapped/{reference}/{sample}.txt"
+        else:
+            return "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+
 # Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
 all_ids = generate_sample_ids(config)
 mapped = {id: generate_all_files(id, config) for id in all_ids}
+filtered_product = filter_combinator(product, config)
 
 #### Main pipeline
 rule all:
     input:
-        consensus_genome = expand("consensus_genomes/{reference}/{sample}.consensus.fasta",
-               sample=all_ids,
-               reference=all_references),
         # pre_fastqc = expand("summary/pre_trim_fastqc/{fname}_fastqc.html",
         #        fname=glob.glob(config['fastq_directory']),
         post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
                sample=all_ids,
                tr=["1P", "1U", "2P", "2U"],
                ext=["zip", "html"]),
-        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt",
+        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt", filtered_product,
                sample=all_ids,
-               reference=all_references)
+               reference=all_references),
+        aggregate = expand("summary/aggregate/{reference}/{sample}.log", filtered_product,
+                sample=all_ids,
+                reference=all_references)
 
 rule index_reference_genome:
     input:
@@ -261,10 +295,33 @@ rule bamstats:
 #             M={params.picard_params}
 #         """
 
+checkpoint align_rate:
+    input:
+        bt2_log = rules.map.output.bt2_log
+    output:
+        temp("{reference}_{sample}_align_rate.txt")
+    shell:
+        """
+        tail -n 1 {input}  > {output}
+        """
+
+rule not_mapped:
+    input: 
+        sorted_sam = rules.sort.output.sorted_sam_file,
+        reference = "references/{reference}.fasta",
+        temp = "{reference}_{sample}_align_rate.txt"
+    output:
+        not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
+    shell:
+        """
+        cat {input.temp} > {output.not_mapped}
+        """
+
 rule pileup:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta"
+        temp = "{reference}_{sample}_align_rate.txt"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:
@@ -337,4 +394,47 @@ rule vcf_to_consensus:
         cat {input.ref} | \
             bcftools consensus {input.bcf} > \
             {output.consensus_genome}
+        """
+
+rule coverage_summary:
+    input:
+        sorted_sam = rules.sort.output.sorted_sam_file
+    output:
+        coverage = "summary/coverage/{reference}/{sample}.bed"
+    shell:
+        """
+        bedtools genomecov -ibam {input.sorted_sam} -bga > {output.coverage}
+        """
+
+rule low_coverage:
+    input:
+        coverage_summary = rules.coverage_summary.output.coverage
+    output:
+        low_coverage = "summary/low_coverage/{reference}/{sample}.bed"
+    params:
+        min_cov = config["params"]["varscan"]["min_cov"]
+    shell:
+        """
+        awk "\$4 < {params.min_cov} {{print \$0}}" {input.coverage_summary} > {output.low_coverage}
+        """
+
+rule mask_consensus:
+    input:
+        consensus_genome = rules.vcf_to_consensus.output.consensus_genome,
+        low_coverage = rules.low_coverage.output.low_coverage
+    output:
+        masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+    shell:
+        """
+        bedtools maskfasta -fi {input.consensus_genome} -bed {input.low_coverage} -fo {output.masked_consensus}
+        """
+
+rule aggregate:
+    input:
+        aggregate_input
+    output:
+        "summary/aggregate/{reference}/{sample}.log"
+    shell:
+        """
+        echo "Final output: {input}" > {output}
         """

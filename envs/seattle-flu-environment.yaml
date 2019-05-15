@@ -9,6 +9,7 @@ dependencies:
   - bamstats
   - bcftools
   - biopython
+  - bedtools
   - bowtie2
   - curl
   - fastqc

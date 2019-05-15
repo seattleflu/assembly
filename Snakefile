@@ -55,7 +55,7 @@ def generate_sample_ids(cfg):
     all_ids = set()
     for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
         if f.endswith('.fastq.gz'):
-            f = f.split('.')[0].split('/')[-1].split('_')[1]
+            f = f.split('.')[0].split('/')[-1].split('_')[0]
             if f in cfg['ignored_samples']:
                 continue
             all_ids.add(f)

@@ -280,7 +280,7 @@ rule bamstats:
 # Uncomment and fix inputs of pileup to re-add
 # rule remove_duplicate_reads:
 #     input:
-#         sorted_sam = rules.sort.output.sorted_sam_file
+#         sorted_bam = rules.sort.output.sorted_bam_file
 #     output:
 #         deduped = "process/deduped/{reference}/{sample}.nodups.sam"
 #     params:
@@ -289,7 +289,7 @@ rule bamstats:
 #         """
 #         picard \
 #             MarkDuplicates \
-#             I={input.sorted_sam} \
+#             I={input.sorted_bam} \
 #             O={output.deduped} \
 #             REMOVE_DUPLICATES=true \
 #             M={params.picard_params}
@@ -307,7 +307,7 @@ checkpoint align_rate:
 
 rule not_mapped:
     input: 
-        sorted_sam = rules.sort.output.sorted_sam_file,
+        sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta",
         temp = "{reference}_{sample}_align_rate.txt"
     output:
@@ -320,7 +320,7 @@ rule not_mapped:
 rule pileup:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta"
+        reference = "references/{reference}.fasta",
         temp = "{reference}_{sample}_align_rate.txt"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
@@ -398,12 +398,12 @@ rule vcf_to_consensus:
 
 rule coverage_summary:
     input:
-        sorted_sam = rules.sort.output.sorted_sam_file
+        sorted_bam = rules.sort.output.sorted_bam_file
     output:
         coverage = "summary/coverage/{reference}/{sample}.bed"
     shell:
         """
-        bedtools genomecov -ibam {input.sorted_sam} -bga > {output.coverage}
+        bedtools genomecov -ibam {input.sorted_bam} -bga > {output.coverage}
         """
 
 rule low_coverage:

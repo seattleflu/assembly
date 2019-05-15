@@ -125,6 +125,8 @@ rule index_reference_genome:
         raw_reference = "references/{reference}.fasta"
     output:
         indexed_reference = "references/{reference}.1.bt2"
+    group:
+        "pre-mapping"
     shell:
         """
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
@@ -137,6 +139,8 @@ rule merge_lanes:
     output:
         merged_r1 = "process/merged/{sample}_R1.fastq.gz",
         merged_r2 = "process/merged/{sample}_R2.fastq.gz"
+    group:
+        "pre-mapping"
     shell:
         """
         cat {input.all_r1} >> {output.merged_r1}
@@ -172,6 +176,8 @@ rule trim_fastqs:
         minimum_length = config["params"]["trimmomatic"]["minimum_length"]
     benchmark:
         "benchmarks/{sample}.trimmo"
+    group:
+        "trim-and-map"
     shell:
         """
         trimmomatic \
@@ -199,6 +205,8 @@ rule post_trim_fastqc:
         qc_2p_zip = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
         qc_1u_zip = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
         qc_2u_zip = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
+    group:
+        "summary-statistics"
     shell:
         """
         fastqc {input.p1} -o summary/post_trim_fastqc
@@ -215,13 +223,15 @@ rule map:
         u2 = rules.trim_fastqs.output.trimmed_fastq_2u,
         ref_file = rules.index_reference_genome.output.indexed_reference
     output:
-        mapped_sam_file = "process/mapped/{reference}/{sample}.sam",
+        mapped_bam_file = "process/mapped/{reference}/{sample}.bam",
         bt2_log = "summary/bowtie2/{reference}/{sample}.log"
     params:
         threads = config["params"]["bowtie2"]["threads"],
         map_all = config["params"]["bowtie2"]["all"]
     benchmark:
         "benchmarks/{sample}_{reference}.bowtie2"
+    group:
+        "trim-and-map"
     shell:
         """
         bowtie2 \
@@ -229,37 +239,41 @@ rule map:
             -1 {input.p1} \
             -2 {input.p2} \
             -U {input.u1},{input.u2} \
-            -S {output.mapped_sam_file} \
             -P {params.threads} \
             {params.map_all} \
-            --local 2> {output.bt2_log}
+            --local 2> {output.bt2_log} | \
+                samtools view -bSF4 - > {output.mapped_bam_file}
         """
 
 rule sort:
     input:
-        mapped_sam = rules.map.output.mapped_sam_file
+        mapped_bam = rules.map.output.mapped_bam_file
     output:
-        sorted_sam_file = "process/sorted/{reference}/{sample}.sorted.sam"
+        sorted_bam_file = "process/sorted/{reference}/{sample}.sorted.bam"
     benchmark:
         "benchmarks/{sample}_{reference}.sort"
+    group:
+        "post-mapping"
     shell:
         """
         samtools view \
-            -bS {input.mapped_sam} | \
+            -bS {input.mapped_bam} | \
             samtools sort | \
-            samtools view -h > {output.sorted_sam_file}
+            samtools view -h > {output.sorted_bam_file}
         """
 
 rule bamstats:
     input:
-        sorted_sam = rules.sort.output.sorted_sam_file
+        sorted_bam = rules.sort.output.sorted_bam_file
     output:
         bamstats_file = "summary/bamstats/{reference}/{sample}.coverage_stats.txt"
     benchmark:
         "benchmarks/{sample}_{reference}.bamstats"
+    group:
+        "summary-statistics"
     shell:
         """
-        BAMStats -i {input.sorted_sam} > {output.bamstats_file}
+        BAMStats -i {input.sorted_bam} > {output.bamstats_file}
         """
 
 # Removed Picard because it was too computationally intensive.
@@ -305,8 +319,8 @@ rule not_mapped:
 
 rule pileup:
     input:
-        sorted_sam = rules.sort.output.sorted_sam_file,
-        reference = "references/{reference}.fasta",
+        sorted_bam = rules.sort.output.sorted_bam_file,
+        reference = "references/{reference}.fasta"
         temp = "{reference}_{sample}_align_rate.txt"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
@@ -314,11 +328,13 @@ rule pileup:
         depth = config["params"]["mpileup"]["depth"]
     benchmark:
         "benchmarks/{sample}_{reference}.mpileup"
+    group:
+        "post-mapping"
     shell:
         """
         samtools mpileup \
             -d {params.depth} \
-            {input.sorted_sam} > {output.pileup} \
+            {input.sorted_bam} > {output.pileup} \
             -f {input.reference}
         """
 

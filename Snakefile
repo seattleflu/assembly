@@ -427,6 +427,10 @@ rule mask_consensus:
     shell:
         """
         bedtools maskfasta -fi {input.consensus_genome} -bed {input.low_coverage} -fo {output.masked_consensus}
+        cat {output.masked_consensus} | \
+            perl -pi -e 's/(?<=>)[^>|]*(?<=|)/{wildcards.sample}/g' > \
+            temp.fasta
+        mv temp.fasta {output.masked_consensus}
         """
 
 rule aggregate:

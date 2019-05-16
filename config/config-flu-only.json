@@ -9,6 +9,8 @@
       {
         
       },
+    "barcode_match" :
+      "test_data/test.txt",
     "min_align_rate": 
       1.00,
     "reference_viruses" :

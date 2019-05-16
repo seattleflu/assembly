@@ -425,14 +425,33 @@ rule mask_consensus:
         consensus_genome = rules.vcf_to_consensus.output.consensus_genome,
         low_coverage = rules.low_coverage.output.low_coverage
     output:
-        masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+        masked_consensus = temp("consensus_genomes/{reference}/{sample}.temp_consensus.fasta")
     shell:
         """
-        bedtools maskfasta -fi {input.consensus_genome} \
-            -bed {input.low_coverage} -fo {output.masked_consensus}
-        cat {output.masked_consensus} | \
+        bedtools maskfasta \
+            -fi {input.consensus_genome} \
+            -bed {input.low_coverage} \
+            -fo {output.masked_consensus}
+        """
+
+rule fasta_headers:
+    input:
+        masked_consensus = rules.mask_consensus.output
+    output:
+        masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+    params:
+        barcode_match = config["barcode_match"]
+    shell:
+        """
+        cat {input.masked_consensus} | \
             perl -pi -e 's/(?<=>)[^>|]*(?<=|)/{wildcards.sample}/g' > \
             temp.fasta
+        seqkit replace -p '({wildcards.sample})' -r '{{kv}}' \
+            -k {params.barcode_match} --keep-key \
+            temp.fasta > {output.masked_consensus}
+        awk '{{split(substr($0,2),a,"|"); \
+            if(a[2]) print ">"a[1]"|"a[1]"-"a[3]"|"a[2]"|"a[3]; \
+            else print; }}' {output.masked_consensus} > temp.fasta
         mv temp.fasta {output.masked_consensus}
         """
 

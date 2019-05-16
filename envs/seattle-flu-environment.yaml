@@ -23,6 +23,7 @@ dependencies:
   - rpy2
   - samtools
   - seaborn
+  - seqkit
   - snakemake
   - tabix
   - trimmomatic

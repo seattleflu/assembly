@@ -126,8 +126,8 @@ rule index_reference_genome:
         raw_reference = "references/{reference}.fasta"
     output:
         indexed_reference = "references/{reference}.1.bt2"
-    group:
-        "pre-mapping"
+    # group:
+    #     "pre-mapping"
     shell:
         """
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
@@ -140,8 +140,8 @@ rule merge_lanes:
     output:
         merged_r1 = "process/merged/{sample}_R1.fastq.gz",
         merged_r2 = "process/merged/{sample}_R2.fastq.gz"
-    group:
-        "pre-mapping"
+    # group:
+    #     "pre-mapping"
     shell:
         """
         cat {input.all_r1} >> {output.merged_r1}
@@ -177,8 +177,8 @@ rule trim_fastqs:
         minimum_length = config["params"]["trimmomatic"]["minimum_length"]
     benchmark:
         "benchmarks/{sample}.trimmo"
-    group:
-        "trim-and-map"
+    # group:
+    #     "trim-and-map"
     shell:
         """
         trimmomatic \
@@ -206,8 +206,8 @@ rule post_trim_fastqc:
         qc_2p_zip = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
         qc_1u_zip = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
         qc_2u_zip = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
-    group:
-        "summary-statistics"
+    # group:
+    #     "summary-statistics"
     shell:
         """
         fastqc {input.p1} -o summary/post_trim_fastqc
@@ -231,8 +231,8 @@ rule map:
         map_all = config["params"]["bowtie2"]["all"]
     benchmark:
         "benchmarks/{sample}_{reference}.bowtie2"
-    group:
-        "trim-and-map"
+    # group:
+    #     "trim-and-map"
     shell:
         """
         bowtie2 \
@@ -253,8 +253,8 @@ rule sort:
         sorted_bam_file = "process/sorted/{reference}/{sample}.sorted.bam"
     benchmark:
         "benchmarks/{sample}_{reference}.sort"
-    group:
-        "post-mapping"
+    # group:
+    #     "post-mapping"
     shell:
         """
         samtools view \
@@ -270,8 +270,8 @@ rule bamstats:
         bamstats_file = "summary/bamstats/{reference}/{sample}.coverage_stats.txt"
     benchmark:
         "benchmarks/{sample}_{reference}.bamstats"
-    group:
-        "summary-statistics"
+    # group:
+    #     "summary-statistics"
     shell:
         """
         BAMStats -i {input.sorted_bam} > {output.bamstats_file}
@@ -329,8 +329,8 @@ rule pileup:
         depth = config["params"]["mpileup"]["depth"]
     benchmark:
         "benchmarks/{sample}_{reference}.mpileup"
-    group:
-        "post-mapping"
+    # group:
+    #     "post-mapping"
     shell:
         """
         samtools mpileup \

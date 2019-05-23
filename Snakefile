@@ -476,3 +476,16 @@ rule aggregate:
         if input.aggregate_input.split(".")[-1] == "fasta":
             shell("cat {input.aggregate_input} >> {params.combined_fasta}")
         shell("echo 'Final output: {input.aggregate_input}' > {output}")
+
+rule clean:
+    message: "Removing directories: {params}"
+    params: 
+        "summary "
+        "process "
+        "benchmarks "
+        "references/*.bt2 "
+        "references/*.fai"
+    shell:
+        """
+        rm -rfv {params}
+        """

@@ -68,6 +68,8 @@
         "318662": ["h3n2_Texas_50_2012"],
         "318665": ["h1n1pdm_Michigan_45_2015"]
       },
+    "barcode_match" :
+      "test_data/test.txt",
     "min_align_rate": 
       1.00,
     "reference_viruses" :

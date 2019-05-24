@@ -45,6 +45,7 @@ https://github.com/lmoncla/illumina_pipeline
 """
 import sys, os
 import glob
+from datetime import datetime
 from itertools import product
 
 #### Helper functions and variable def'ns
@@ -299,7 +300,7 @@ checkpoint align_rate:
     input:
         bt2_log = rules.map.output.bt2_log
     output:
-        temp("{reference}_{sample}_align_rate.txt")
+        temp("summary/{reference}_{sample}_align_rate.txt")
     shell:
         """
         tail -n 1 {input}  > {output}
@@ -309,7 +310,7 @@ rule not_mapped:
     input: 
         sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta",
-        temp = "{reference}_{sample}_align_rate.txt"
+        temp = "summary/{reference}_{sample}_align_rate.txt"
     output:
         not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
     shell:
@@ -321,7 +322,7 @@ rule pileup:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta",
-        temp = "{reference}_{sample}_align_rate.txt"
+        temp = "summary/{reference}_{sample}_align_rate.txt"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:
@@ -415,7 +416,8 @@ rule low_coverage:
         min_cov = config["params"]["varscan"]["min_cov"]
     shell:
         """
-        awk "\$4 < {params.min_cov} {{print \$0}}" {input.coverage_summary} > {output.low_coverage}
+        awk "\$4 < {params.min_cov} {{print \$0}}" \
+            {input.coverage_summary} > {output.low_coverage}
         """
 
 rule mask_consensus:
@@ -423,18 +425,54 @@ rule mask_consensus:
         consensus_genome = rules.vcf_to_consensus.output.consensus_genome,
         low_coverage = rules.low_coverage.output.low_coverage
     output:
-        masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+        masked_consensus = temp("consensus_genomes/{reference}/{sample}.temp_consensus.fasta")
     shell:
         """
-        bedtools maskfasta -fi {input.consensus_genome} -bed {input.low_coverage} -fo {output.masked_consensus}
+        bedtools maskfasta \
+            -fi {input.consensus_genome} \
+            -bed {input.low_coverage} \
+            -fo {output.masked_consensus}
         """
 
-rule aggregate:
+rule fasta_headers:
     input:
-        aggregate_input
+        masked_consensus = rules.mask_consensus.output
     output:
-        "summary/aggregate/{reference}/{sample}.log"
+        masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+    params:
+        barcode_match = config["barcode_match"]
     shell:
         """
-        echo "Final output: {input}" > {output}
+        cat {input.masked_consensus} | \
+            perl -pi -e 's/(?<=>)[^>|]*(?<=|)/{wildcards.sample}/g' > \
+            temp_{wildcards.sample}.fasta
+        seqkit replace -p '({wildcards.sample})' -r '{{kv}}' \
+            -k {params.barcode_match} --keep-key \
+            temp_{wildcards.sample}.fasta > {output.masked_consensus}
+        awk '{{split(substr($0,2),a,"|"); \
+            if(a[2]) print ">"a[1]"|"a[1]"-"a[3]"|"a[2]"|"a[3]; \
+            else print; }}' \
+            {output.masked_consensus} > temp_{wildcards.sample}.fasta
+        mv temp_{wildcards.sample}.fasta {output.masked_consensus}
         """
+
+rule combined_fasta:
+    output:
+        combined_fasta = "consensus_genomes/batch-{current_datetime}.fasta"
+                          .format(current_datetime=datetime.now().date())
+    shell:
+        """
+        touch {output.combined_fasta}
+        """
+    
+rule aggregate:
+    input:
+        aggregate_input = aggregate_input
+    output:
+        aggregate_summary = "summary/aggregate/{reference}/{sample}.log"
+    params: 
+        combined_fasta = rules.combined_fasta.output
+    run:
+        if input.aggregate_input.split(".")[-1] == "fasta":
+            shell("cat {input.aggregate_input} >> {params.combined_fasta}")
+        shell("echo 'Final output: {input.aggregate_input}' > {output}")

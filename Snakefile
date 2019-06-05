@@ -300,7 +300,7 @@ checkpoint align_rate:
     input:
         bt2_log = rules.map.output.bt2_log
     output:
-        temp("summary/{reference}_{sample}_align_rate.txt")
+        temp("summary/align_rate/{reference}/{sample}.txt")
     shell:
         """
         tail -n 1 {input}  > {output}
@@ -310,7 +310,7 @@ rule not_mapped:
     input: 
         sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta",
-        temp = "summary/{reference}_{sample}_align_rate.txt"
+        temp = "summary/align_rate/{reference}/{sample}.txt"
     output:
         not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
     shell:
@@ -322,7 +322,7 @@ rule pileup:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta",
-        temp = "summary/{reference}_{sample}_align_rate.txt"
+        temp = "summary/align_rate/{reference}/{sample}.txt"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:

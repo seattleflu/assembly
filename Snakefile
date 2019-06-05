@@ -333,7 +333,7 @@ rule pileup:
     #     "post-mapping"
     shell:
         """
-        samtools mpileup \
+        samtools mpileup -A \
             -d {params.depth} \
             {input.sorted_bam} > {output.pileup} \
             -f {input.reference}

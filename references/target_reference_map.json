@@ -1,0 +1,6 @@
+{
+    "Flu_A_H3" : ["h3n2_Texas_50_2012"],
+    "Flu_A_H1": ["h1n1pdm_Michigan_45_2015"],
+    "Flu_A_pan": ["h3n2_Texas_50_2012", "h1n1pdm_Michigan_45_2015"],
+    "Flu_B_pan": ["vic_Brisbane_60_2008", "yam_Wisconsin_01_2010"]
+}

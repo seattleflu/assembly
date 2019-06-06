@@ -43,35 +43,45 @@ positional arguments:
 optional arguments:
   -h, --help       show this help message and exit
 ```
-### Sample-Reference Pairs and Ignored Samples
+### Setup Config File
 By default, the pipeline will generate combinations of all samples and references and try to create consensus genomes for all combinations.  
 
-Avoid this by specifying specific sample-reference pairs and ignored samples in the config file, which can be done manually or by using:
+Avoid this by specifying specific sample-reference pairs and ignored samples in the config file by using:
 ```
-python scripts/flu_sample_ref_pair.py
-usage: flu_sample_ref_pair.py [-h]
-                              [FASTQ directory] [Sample/target map]
-                              [Sample column] [Target column] [Config file]
+python scripts/setup_config_file.py
+usage: setup_config_file.py [-h] [--sample [Sample column]]
+                            [--target [Target column]]
+                            [--max_difference [Max percent difference]]
+                            [FASTQ directory] [Config file]
+                            [Sample/target map]
 
-Generate sample/reference pairs for Flu only. Samples not found in
-«Sample/target map» are added to ignored samples. 
+Edits the Snakemake config file by adding sample reference pairs and ignored
+samples.
 
 positional arguments:
-  FASTQ directory    File path to directory containing fastq files (default:
-                     None)
-  Sample/target map  File path to Excel file containing samples and present
-                     targets (default: None)
-  Sample column      Column name of column containg NWGC sample IDs (default:
-                     None)
-  Target column      Column name of column containing target identifiers
-                     (default: None)
-  Config file        File path to config file to be used with Snakemake
-                     (default: None)
+  FASTQ directory       File path to directory containing fastq files
+                        (default: None)
+  Config file           File path to config file to be used with Snakemake
+                        (default: None)
+  Sample/target map     File path to Excel file containing samples and present
+                        targets (default: None)
 
 optional arguments:
-  -h, --help         show this help message and exit
+  -h, --help            show this help message and exit
+  --sample [Sample column]
+                        Column name of column containg NWGC sample IDs
+                        (default: sample)
+  --target [Target column]
+                        Column name of column containing target identifiers
+                        (default: target)
+  --max_difference [Max percent difference]
+                        The maximum difference acceptable between R1 and R2
+                        reads (default: 20)
 ```
-__Note__: This only works specifically for flu-positive samples. 
+__Note__: This currently only works for flu-positive samples. To add more targets/references, edit `references/target_reference_map.json`.
+
+#### Check Read Pairs
+Embedded in this script is a check to ensure that the reads in R1 and R2 of each sample match. This is to avoid the demultiplexing error described in [this paper](https://www.nature.com/articles/s41588-019-0349-3). If the reads differ by over 20% then the sample will be added to the ignored samples. Redirect the output to a file to keep track of read differences and ignored samples. 
 
 ### NWGC ID/SFS UUID key-value pair
 Consensus genome FASTA headers are generated with the NWGC sample ID which then needs to be converted to the SFS UUID in order to be paired with stored metadata. 

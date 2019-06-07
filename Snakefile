@@ -434,20 +434,35 @@ rule mask_consensus:
             -fo {output.masked_consensus}
         """
 
+rule nwgc_sfs_map:
+    params:
+        mapper_file = config["barcode_match"]["mapper_filepath"],
+        nwgc_column = config["barcode_match"]["nwgc_column"],
+        sfs_column = config["barcode_match"]["sfs_column"],
+    output:
+        key_value_file = config["barcode_match"]["key_value_filepath"]
+    shell:
+        """
+        python3 scripts/id_barcode_key_value.py \
+            {params.mapper_file} \
+            {params.nwgc_column} \
+            {params.sfs_column} \
+            {output.key_value_file}
+        """
+
 rule fasta_headers:
     input:
+        key_value_file = rules.nwgc_sfs_map.output,
         masked_consensus = rules.mask_consensus.output
     output:
         masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
-    params:
-        barcode_match = config["barcode_match"]
     shell:
         """
         cat {input.masked_consensus} | \
             perl -pi -e 's/(?<=>)[^>|]*(?<=|)/{wildcards.sample}/g' > \
             temp_{wildcards.sample}.fasta
         seqkit replace -p '({wildcards.sample})' -r '{{kv}}' \
-            -k {params.barcode_match} --keep-key \
+            -k {input.key_value_file} --keep-key \
             temp_{wildcards.sample}.fasta > {output.masked_consensus}
         awk '{{split(substr($0,2),a,"|"); \
             if(a[2]) print ">"a[1]"|"a[1]"-"a[3]"|"a[2]"|"a[3]; \

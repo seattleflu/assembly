@@ -19,7 +19,7 @@ if __name__=="__main__":
         description="Create key/value pairs of NWGC ID and SFS ID",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("match-file", type=str, nargs="?",
+    parser.add_argument("match_file", type=str, nargs="?",
         metavar="NWGC-SFS-Match",
         help="File path to Excel file that matches NWGC ID to SFS ID")
     parser.add_argument("NWGC", type=str, nargs="?",
@@ -28,16 +28,14 @@ if __name__=="__main__":
     parser.add_argument("SFS", type=str, nargs="?",
         metavar="SFS-column",
         help="Column name of column containing SFS UUIDs")
-    parser.add_argument("output-file", type=str, nargs="?",
+    parser.add_argument("output_file", type=str, nargs="?",
         metavar="Output",
         help="File path for output key/value file")
     
-    try:
-        args = parser.parse_args()
-        create_key_value_pairs(args.match_file, 
+   
+    args = parser.parse_args()
+    create_key_value_pairs(args.match_file, 
                                args.NWGC, 
                                args.SFS, 
                                args.output_file)
-    except:
-        parser.print_help()
-        sys.exit(0)
+    

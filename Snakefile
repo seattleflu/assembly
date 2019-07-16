@@ -326,14 +326,16 @@ rule pileup:
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:
-        depth = config["params"]["mpileup"]["depth"]
+        depth = config["params"]["mpileup"]["depth"],
+        min_base_qual = config["params"]["varscan"]["snp_qual_threshold"]
     benchmark:
         "benchmarks/{sample}_{reference}.mpileup"
     # group:
     #     "post-mapping"
     shell:
         """
-        samtools mpileup -A \
+        samtools mpileup -a -A \
+            -Q {params.min_base_qual} \
             -d {params.depth} \
             {input.sorted_bam} > {output.pileup} \
             -f {input.reference}

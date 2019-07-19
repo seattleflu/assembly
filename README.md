@@ -17,11 +17,11 @@ conda activate seattle-flu
 
 ## Set Up
 ### FASTQ Files
-The pipeline expects 8 total FASTQ files for each individual sample, with Read 1 (R1) and Read 2 (R2) from 4 different lanes. 
+The pipeline expects 8 total FASTQ files for each individual sample, with Read 1 (R1) and Read 2 (R2) from 4 different lanes.
 
 Expected filename format: `318375_S12_L001_R1_001.fastq.gz` where `318375` is the NWGC sample ID.
 
-If the filename does not contain the NWGC sample ID, rename the FASTQ files by using: 
+If the filename does not contain the NWGC sample ID, rename the FASTQ files by using:
 ```
 python scripts/rename_fastq.py
 usage: rename_fastq.py [-h]
@@ -167,6 +167,11 @@ Also a placeholder for how to handle sample/reference pairs that do not meet the
 ### 10. Pileup
 Generates [Pileup](https://en.wikipedia.org/wiki/Pileup_format) for BAM file using [samtools mpileup](http://www.htslib.org/doc/samtools.html).
 
+  _Important Flags_:
+  * `-a` to print out all positions, including zero depth (this is necessary for generating the low coverage Bedfile later)
+  * `-A` to not discard anomalous read pairs
+  * `-Q` to set the minimum base quality to consider a read (set to match the minimum in `varscan mpileup2snp` so that their coverage depths match)
+
 ### 11. Call SNPs
 Calls SNPs from the Pileup based on parameters set in the config file using [varscan mpileup2snp](http://varscan.sourceforge.net/using-varscan.html#v2.3_mpileup2snp)
 
@@ -179,26 +184,23 @@ Creates index for compressed VCF using [bcftools index](https://samtools.github.
 ### 14. VCF to consensus
 Create consensus genome by applying VCF variants to the reference genome using [bcftools consensus](https://samtools.github.io/bcftools/bcftools.html#consensus). This does not account for coverage, so it will just fill in blanks with the base from the reference genome. 
 
-### 15. Coverage summary
-Generates [BED](https://genome.ucsc.edu/FAQ/FAQformat.html#format1) file that reports coverage per base using [bedtools genomecov](https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html).
+### 15. Create bed file
+Creates a BED file for positions that need to be masked in the consensus genome. Positions need to be masked if they are below the minimum coverage depth and if they are disproportionally supported by one strand (>90%).
 
-### 16. Low coverage
-Searches the coverage summary BED file for bases where coverage is below the `min_cov` parameter and outputs them in a separate BED file. 
-
-### 17. Mask consensus
+### 16. Mask consensus
 Masks the consensus genome with "N" at bases where coverage is below the `min_cov` parameter using [bedtools maskfasta](https://bedtools.readthedocs.io/en/latest/content/tools/maskfasta.html).
 
-### 18. FASTA headers
-Edits the FASTA headers to fit the pattern needed for downstream analysis. 
+### 17. FASTA headers
+Edits the FASTA headers to fit the pattern needed for downstream analysis.
 Example FASTA header: `>SFS-UUID|SFS-UUID-PB2|H1N1pdm|PB2`
 1. Replace reference sequence name with the NWGC sample ID using Perl to perform "lookaround" regex matches
 2. Uses [seqkit replace](https://bioinf.shenwei.me/seqkit/usage/#replace) to replace the NWGC sample ID with the SFS UUID.
 3.  Create the UUID-gene combination using AWK
 
-### 19. Combined FASTA
-Creates the final combined FASTA file that will have all the consensus genomes generated in a day. 
+### 18. Combined FASTA
+Creates the final combined FASTA file that will have all the consensus genomes generated in a day.
 
-### 20. Aggregate
+### 19. Aggregate
 This is the last rule of the pipeline that prints out the final result of each sample/reference pair. If a consensus genome is generated, then this will also add it to the final combined FASTA.
 
 The input of this rule differs based on the result of the checkpoint, so this rule dictates the final outcome of each sample/reference pair. 

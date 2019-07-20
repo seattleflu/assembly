@@ -2,7 +2,7 @@
 Edits the config file for Snakemake by filling in two fields:
 "ignored_samples" and "sample_reference_pairs".
 
-Currently need to download Excel file from Metabase that contains the 
+Currently need to download Excel file from Metabase that contains the
 NWGC sample ID and the target identifiers where present is True for the sample.
 """
 import glob
@@ -13,11 +13,11 @@ import gzip
 import pandas as pd
 from typing import Tuple
 
-def edit_config_file(file_dir: str, 
-                     config_file:str, 
+def edit_config_file(file_dir: str,
+                     config_file:str,
                      presence_file: str,
-                     sample: str, 
-                     target:str, 
+                     sample: str,
+                     target:str,
                      max_difference: int):
     """
     For all the samples listed in *file_dir*, create a dict that maps each
@@ -27,8 +27,8 @@ def edit_config_file(file_dir: str,
         reference_map = json.load(f)
     sample_target_map = create_sample_target_map(presence_file, sample, target)
     all_samples = sample_ids(file_dir)
-    
-    (sample_ref_pairs, 
+
+    (sample_ref_pairs,
      ignored_samples) = generate_config_values(all_samples,
                                                file_dir,
                                                max_difference,
@@ -44,7 +44,7 @@ def edit_config_file(file_dir: str,
         json.dump(data, f, indent=4)
 
 
-def create_sample_target_map(presence_file: str, 
+def create_sample_target_map(presence_file: str,
                              sample: str, target: str) -> dict:
     """
     Create a map of samples and targets from the given *presence_file*,
@@ -71,18 +71,18 @@ def sample_ids(file_dir: str) -> set:
     return samples
 
 
-def generate_config_values(all_samples: set, 
-                           file_dir: str, 
-                           max_diff: int, 
-                           sample_target_map: dict, 
+def generate_config_values(all_samples: set,
+                           file_dir: str,
+                           max_diff: int,
+                           sample_target_map: dict,
                            ref_map: dict) -> Tuple[dict, set]:
     """
     Generates the sample_reference_pairs dict and ignored_samples set.
 
     Samples are added to ignored_samples if read difference between R1 and
     R2 is greater than *max_diff* or if the sample cannot be found in the
-    *sample_target_map*. 
-    
+    *sample_target_map*.
+
     The sample_reference_pairs is made using the *sample_target_map* and
     the *ref_map* for the remaining samples.
     """
@@ -103,7 +103,7 @@ def generate_config_values(all_samples: set,
             for target in target_list:
                 config_targets.update(ref_map[target])
             sample_reference_pairs[sample] = list(config_targets)
-    
+
     return (sample_reference_pairs, ignored_samples)
 
 
@@ -112,7 +112,7 @@ def sample_reads_pair(file_dir: str, sample: str, max_diff: int) -> bool:
     """
     Check all *sample* files in *file_dir* to ensure reads are paired.
 
-    Returns True if the difference between R1 and R2 is 
+    Returns True if the difference between R1 and R2 is
     less than or equal to the *max_diff*
     """
     print(f"Sample: {sample}")
@@ -130,7 +130,7 @@ def check_r1_r2_reads(r1: str , r2: str) -> int:
     """
     Checks the difference between the reads in R1 and R2.
 
-    Returns the percent different as an int. 
+    Returns the percent different as an int.
     """
     r1_read_ids = find_read_ids(r1)
     r2_read_ids = find_read_ids(r2)
@@ -142,7 +142,7 @@ def check_r1_r2_reads(r1: str , r2: str) -> int:
     print(f"R1 and R2 reads differ by {percent_different}%")
     print(different_read_ids)
     return percent_different
-    
+
 
 def find_read_ids(fastq_file: str) -> set:
     """
@@ -186,14 +186,11 @@ if __name__ == "__main__":
         metavar="Max percent difference",
         default=20,
         help="The maximum difference acceptable between R1 and R2 reads")
-    
-   
-    try:
-        args = parser.parse_args()
-        edit_config_file(args.directory, args.config_file,
-                         args.sample_target_map, 
-                         args.sample, args.target,
-                         args.max_difference)
-    except:
-        parser.print_help()
-        sys.exit(0)
+
+
+
+    args = parser.parse_args()
+    edit_config_file(args.directory, args.config_file,
+                        args.sample_target_map,
+                        args.sample, args.target,
+                        args.max_difference)

@@ -307,7 +307,7 @@ checkpoint align_rate:
         """
 
 rule not_mapped:
-    input: 
+    input:
         sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta",
         temp = "summary/align_rate/{reference}/{sample}.txt"
@@ -473,13 +473,13 @@ rule combined_fasta:
         """
         touch {output.combined_fasta}
         """
-    
+
 rule aggregate:
     input:
         aggregate_input = aggregate_input
     output:
         aggregate_summary = "summary/aggregate/{reference}/{sample}.log"
-    params: 
+    params:
         combined_fasta = rules.combined_fasta.output
     run:
         if input.aggregate_input.split(".")[-1] == "fasta":
@@ -488,7 +488,7 @@ rule aggregate:
 
 rule clean:
     message: "Removing directories: {params}"
-    params: 
+    params:
         "summary "
         "process "
         "benchmarks "

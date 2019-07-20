@@ -3,7 +3,7 @@ Generate NWGC sample ID and SFS barcode key-value pairs
 """
 import os, sys
 import argparse
-import pandas as pd 
+import pandas as pd
 
 def create_key_value_pairs(filename: str, NWGC: str, SFS:str, output:str):
     """
@@ -31,11 +31,9 @@ if __name__=="__main__":
     parser.add_argument("output_file", type=str, nargs="?",
         metavar="Output",
         help="File path for output key/value file")
-    
-   
+
     args = parser.parse_args()
-    create_key_value_pairs(args.match_file, 
-                               args.NWGC, 
-                               args.SFS, 
+    create_key_value_pairs(args.match_file,
+                               args.NWGC,
+                               args.SFS,
                                args.output_file)
-    

@@ -437,7 +437,7 @@ rule nwgc_sfs_map:
         key_value_file = config["barcode_match"]["key_value_filepath"]
     shell:
         """
-        python3 scripts/id_barcode_key_value.py \
+        python scripts/id_barcode_key_value.py \
             {params.mapper_file} \
             {params.nwgc_column} \
             {params.sfs_column} \

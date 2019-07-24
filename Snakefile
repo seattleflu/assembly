@@ -45,6 +45,7 @@ https://github.com/lmoncla/illumina_pipeline
 """
 import sys, os
 import glob
+import getpass
 from datetime import datetime
 from itertools import product
 
@@ -526,7 +527,9 @@ rule post_masked_consensus_and_summary_stats_to_id3c:
     params:
         id3c_url = config['id3c-consensus-genome-post-url'],
         id3c_username_and_password = config['id3c-username-and-password'],
-        id3c_expected_response_code = 204
+        id3c_expected_response_code = 204,
+        id3c_slack_webhook = config['id3c-alerts-slack-webhook'],
+        user = getpass.getuser()
     log: "consensus_genomes/{reference}/{sample}.http-response.log"
     shell:
         """
@@ -539,6 +542,11 @@ rule post_masked_consensus_and_summary_stats_to_id3c:
         if [ "$response" != "{params.id3c_expected_response_code}" ]
         then
             echo "Something went wrong in the ID3C POST request.\nSee {log} for more information."
+            curl -X POST -H 'Content-type: application/json' \
+                --data '{{"text": \
+                ":rotating_light: @{params.user} Assembly failed to upload to ID3C.\nMore details at `{log}`"}}' \
+                {params.id3c_slack_webhook}
+
             exit $response
         fi
         """

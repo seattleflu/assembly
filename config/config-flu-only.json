@@ -85,6 +85,7 @@
       },
     "id3c-consensus-genome-post-url": "http://localhost:5000/v1/receiving/consensus-genome",
     "id3c-username-and-password": "test:123",
+    "id3c-alerts-slack-webhook": "ID3C-ALERTS-SLACK-WEBHOOK-URL",
     "params" :
       {
         "trimmomatic" :

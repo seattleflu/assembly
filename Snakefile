@@ -399,33 +399,25 @@ rule vcf_to_consensus:
             {output.consensus_genome}
         """
 
-rule coverage_summary:
+rule create_bed_file:
     input:
-        sorted_bam = rules.sort.output.sorted_bam_file
+        pileup = rules.pileup.output.pileup
     output:
-        coverage = "summary/coverage/{reference}/{sample}.bed"
-    shell:
-        """
-        bedtools genomecov -ibam {input.sorted_bam} -bga > {output.coverage}
-        """
-
-rule low_coverage:
-    input:
-        coverage_summary = rules.coverage_summary.output.coverage
-    output:
-        low_coverage = "summary/low_coverage/{reference}/{sample}.bed"
+        bed_file = "summary/low_coverage/{reference}/{sample}.bed"
     params:
         min_cov = config["params"]["varscan"]["min_cov"]
     shell:
         """
-        awk "\$4 < {params.min_cov} {{print \$0}}" \
-            {input.coverage_summary} > {output.low_coverage}
+        python scripts/create_bed_file_for_masking.py \
+            --pileup {input.pileup} \
+            --min-cov {params.min_cov} \
+            --bed-file {output.bed_file}
         """
 
 rule mask_consensus:
     input:
         consensus_genome = rules.vcf_to_consensus.output.consensus_genome,
-        low_coverage = rules.low_coverage.output.low_coverage
+        low_coverage = rules.create_bed_file.output.bed_file
     output:
         masked_consensus = temp("consensus_genomes/{reference}/{sample}.temp_consensus.fasta")
     shell:

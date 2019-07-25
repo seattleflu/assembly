@@ -307,7 +307,7 @@ checkpoint align_rate:
         """
 
 rule not_mapped:
-    input: 
+    input:
         sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta",
         temp = "summary/align_rate/{reference}/{sample}.txt"
@@ -399,33 +399,27 @@ rule vcf_to_consensus:
             {output.consensus_genome}
         """
 
-rule coverage_summary:
+rule create_bed_file:
     input:
-        sorted_bam = rules.sort.output.sorted_bam_file
+        pileup = rules.pileup.output.pileup
     output:
-        coverage = "summary/coverage/{reference}/{sample}.bed"
-    shell:
-        """
-        bedtools genomecov -ibam {input.sorted_bam} -bga > {output.coverage}
-        """
-
-rule low_coverage:
-    input:
-        coverage_summary = rules.coverage_summary.output.coverage
-    output:
-        low_coverage = "summary/low_coverage/{reference}/{sample}.bed"
+        bed_file = "summary/low_coverage/{reference}/{sample}.bed"
     params:
-        min_cov = config["params"]["varscan"]["min_cov"]
+        min_cov = config["params"]["varscan"]["min_cov"],
+        min_freq = config["params"]["varscan"]["snp_frequency"]
     shell:
         """
-        awk "\$4 < {params.min_cov} {{print \$0}}" \
-            {input.coverage_summary} > {output.low_coverage}
+        python scripts/create_bed_file_for_masking.py \
+            --pileup {input.pileup} \
+            --min-cov {params.min_cov} \
+            --min-freq {params.min_freq} \
+            --bed-file {output.bed_file}
         """
 
 rule mask_consensus:
     input:
         consensus_genome = rules.vcf_to_consensus.output.consensus_genome,
-        low_coverage = rules.low_coverage.output.low_coverage
+        low_coverage = rules.create_bed_file.output.bed_file
     output:
         masked_consensus = temp("consensus_genomes/{reference}/{sample}.temp_consensus.fasta")
     shell:
@@ -481,13 +475,13 @@ rule combined_fasta:
         """
         touch {output.combined_fasta}
         """
-    
+
 rule aggregate:
     input:
         aggregate_input = aggregate_input
     output:
         aggregate_summary = "summary/aggregate/{reference}/{sample}.log"
-    params: 
+    params:
         combined_fasta = rules.combined_fasta.output
     run:
         if input.aggregate_input.split(".")[-1] == "fasta":
@@ -496,7 +490,7 @@ rule aggregate:
 
 rule clean:
     message: "Removing directories: {params}"
-    params: 
+    params:
         "summary "
         "process "
         "benchmarks "

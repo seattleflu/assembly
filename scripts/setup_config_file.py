@@ -1,6 +1,6 @@
 """
-Edits the config file for Snakemake by filling in two fields:
-"ignored_samples" and "sample_reference_pairs".
+Creates the Snakemake config file by copying the config template then adding
+sample reference pairs and ignored samples.
 
 Currently need to download Excel file from Metabase that contains the
 NWGC sample ID and the target identifiers where present is True for the sample.
@@ -13,12 +13,14 @@ import gzip
 import pandas as pd
 from typing import Tuple
 
-def edit_config_file(file_dir: str,
-                     config_file:str,
-                     presence_file: str,
-                     sample: str,
-                     target:str,
-                     max_difference: int):
+def create_config_file(file_dir: str,
+                       config_template:str,
+                       config_file:str,
+                       presence_file: str,
+                       sample: str,
+                       target:str,
+                       max_difference: int,
+                       lane: int):
     """
     For all the samples listed in *file_dir*, create a dict that maps each
     sample to a list of references.
@@ -33,15 +35,19 @@ def edit_config_file(file_dir: str,
                                                file_dir,
                                                max_difference,
                                                sample_target_map,
-                                               reference_map)
+                                               reference_map,
+                                               lane)
 
-    with open(config_file, "r+") as f:
-        data = json.load(f)
+    with open(config_template, "r") as template:
+        data = json.load(template)
+        data["fastq_directory"] = file_dir
         data["sample_reference_pairs"] = sample_ref_pairs
         data["ignored_samples"] = dict.fromkeys(ignored_samples, {})
-        f.seek(0)
-        f.truncate()
-        json.dump(data, f, indent=4)
+        template.close()
+        with open(config_file, "w+") as new_config:
+            new_config.seek(0)
+            new_config.truncate()
+            json.dump(data, new_config, indent=4)
 
 
 def create_sample_target_map(presence_file: str,
@@ -53,7 +59,7 @@ def create_sample_target_map(presence_file: str,
 
     In the returned dict, the keys are the sample IDs and the values are a
     list of targets.
-    """  
+    """
     present_refs = pd.read_excel(presence_file, usecols=[sample, target])
     present_refs[sample] = present_refs[sample].astype(str)
     present_refs[target] = present_refs[target].apply(lambda x: x.split(","))
@@ -75,7 +81,8 @@ def generate_config_values(all_samples: set,
                            file_dir: str,
                            max_diff: int,
                            sample_target_map: dict,
-                           ref_map: dict) -> Tuple[dict, set]:
+                           ref_map: dict,
+                           lane: int) -> Tuple[dict, set]:
     """
     Generates the sample_reference_pairs dict and ignored_samples set.
 
@@ -90,7 +97,7 @@ def generate_config_values(all_samples: set,
     ignored_samples = set()
 
     for sample in all_samples:
-        if not sample_reads_pair(file_dir, sample, max_diff):
+        if not sample_reads_pair(file_dir, sample, max_diff, lane):
             print(f"{sample} has too many unpaired reads."
                   + "Adding to ignored samples")
             ignored_samples.add(sample)
@@ -108,7 +115,10 @@ def generate_config_values(all_samples: set,
 
 
 
-def sample_reads_pair(file_dir: str, sample: str, max_diff: int) -> bool:
+def sample_reads_pair(file_dir: str,
+                      sample: str,
+                      max_diff: int,
+                      lane: int) -> bool:
     """
     Check all *sample* files in *file_dir* to ensure reads are paired.
 
@@ -117,6 +127,8 @@ def sample_reads_pair(file_dir: str, sample: str, max_diff: int) -> bool:
     """
     print(f"Sample: {sample}")
     for i in range(1, 5):
+        if lane and lane != i:
+            continue
         print(f"Lane: {i}")
         r1 = glob.glob(file_dir + f"/{sample}*L00{i}*R1*.fastq.gz")[0]
         r2 = glob.glob(file_dir + f"/{sample}*L00{i}*R2*.fastq.gz")[0]
@@ -159,18 +171,18 @@ def find_read_ids(fastq_file: str) -> set:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="""
-        Edits the Snakemake config file by adding sample reference pairs and
-        ignored samples.
-        """,
+        description=__doc__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("directory", type=str, nargs="?",
         metavar="FASTQ directory",
         help="File path to directory containing fastq files")
+    parser.add_argument("config_template", type=str, nargs="?",
+        metavar="Config template",
+        help="File path to config file template used to generate config files.")
     parser.add_argument("config_file", type=str, nargs="?",
         metavar="Config file",
-        help="File path to config file to be used with Snakemake")
+        help="File path to config file to be used for snakemake.")
     parser.add_argument("sample_target_map", type=str, nargs="?",
         metavar="Sample/target map",
         help="File path to Excel file containing samples and present targets")
@@ -184,13 +196,19 @@ if __name__ == "__main__":
         help="Column name of column containing target identifiers")
     parser.add_argument("--max_difference", type=int, nargs="?",
         metavar="Max percent difference",
-        default=20,
+        default=0,
         help="The maximum difference acceptable between R1 and R2 reads")
-
+    parser.add_argument("--lane", type=int, nargs="?",
+        metavar="Lane",
+        default=None,
+        help="Specify the specific lane if samples only come from a single lane.")
 
 
     args = parser.parse_args()
-    edit_config_file(args.directory, args.config_file,
-                        args.sample_target_map,
-                        args.sample, args.target,
-                        args.max_difference)
+    create_config_file(args.directory,
+                     args.config_template,
+                     args.config_file,
+                     args.sample_target_map,
+                     args.sample, args.target,
+                     args.max_difference,
+                     args.lane)

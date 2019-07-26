@@ -17,7 +17,7 @@ conda activate seattle-flu
 
 ## Set Up
 ### FASTQ Files
-The pipeline expects 8 total FASTQ files for each individual sample, with Read 1 (R1) and Read 2 (R2) from 4 different lanes.
+The pipeline expects 2 or 8 total FASTQ files for each individual sample, with Read 1 (R1) and Read 2 (R2) from 1 lane or 4 different lanes.
 
 Expected filename format: `318375_S12_L001_R1_001.fastq.gz` where `318375` is the NWGC sample ID.
 
@@ -43,45 +43,7 @@ positional arguments:
 optional arguments:
   -h, --help       show this help message and exit
 ```
-### Setup Config File
-By default, the pipeline will generate combinations of all samples and references and try to create consensus genomes for all combinations.
 
-Avoid this by specifying specific sample-reference pairs and ignored samples in the config file by using:
-```
-python scripts/setup_config_file.py
-usage: setup_config_file.py [-h] [--sample [Sample column]]
-                            [--target [Target column]]
-                            [--max_difference [Max percent difference]]
-                            [FASTQ directory] [Config file]
-                            [Sample/target map]
-
-Edits the Snakemake config file by adding sample reference pairs and ignored
-samples.
-
-positional arguments:
-  FASTQ directory       File path to directory containing fastq files
-                        (default: None)
-  Config file           File path to config file to be used with Snakemake
-                        (default: None)
-  Sample/target map     File path to Excel file containing samples and present
-                        targets (default: None)
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --sample [Sample column]
-                        Column name of column containg NWGC sample IDs
-                        (default: sample)
-  --target [Target column]
-                        Column name of column containing target identifiers
-                        (default: target)
-  --max_difference [Max percent difference]
-                        The maximum difference acceptable between R1 and R2
-                        reads (default: 20)
-```
-__Note__: This currently only works for flu-positive samples. To add more targets/references, edit `references/target_reference_map.json`.
-
-#### Check Read Pairs
-Embedded in this script is a check to ensure that the reads in R1 and R2 of each sample match. This is to avoid the demultiplexing error described in [this paper](https://www.nature.com/articles/s41588-019-0349-3). If the reads differ by over 20% then the sample will be added to the ignored samples. Redirect the output to a file to keep track of read differences and ignored samples.
 
 ### NWGC ID/SFS UUID key-value pair
 Consensus genome FASTA headers are generated with the NWGC sample ID which then needs to be converted to the SFS UUID in order to be paired with stored metadata.
@@ -108,8 +70,8 @@ optional arguments:
 ```
 __Note__: Remember to add the path of the output file to the config file after running this script.
 
-## Configuration
-Currently, `config/config-flu-only.json` has the most updated version of the configuration needed to run assembly.
+## Batch Assembly Jobs
+Currently, `config/config-flu-only.json` has the most updated version of the configuration needed to run batch assembly jobs. This means that there are several samples that are run at the same time.
 
 * `fastq_directory`: the path to the directory containing the fastq files
 * `ignored_samples`: an object containing keys that specify samples to be ignored
@@ -119,8 +81,54 @@ Currently, `config/config-flu-only.json` has the most updated version of the con
 * `reference_virusus`: an object containing keys that specify references to be used
 * `params`: parameters for the various tools used in the pipeline (currently set by Louise's recommendations)
 
-## Usage
-Running (this will be updated):
+**Setup Config File**
+By default, the pipeline will generate combinations of all samples and references and try to create consensus genomes for all combinations.
+
+Avoid this by specifying specific sample-reference pairs and ignored samples in the config file by using:
+```
+python scripts/setup_config_file.py
+usage: setup_config_file.py [-h] [--sample [Sample column]]
+                            [--target [Target column]]
+                            [--max_difference [Max percent difference]]
+                            [--lane [Lane]]
+                            [FASTQ directory] [Config template] [Config file]
+                            [Sample/target map]
+
+Creates the Snakemake config file by copying the config template then adding
+sample reference pairs and ignored samples. Currently need to download Excel
+file from Metabase that contains the NWGC sample ID and the target identifiers
+where present is True for the sample.
+
+positional arguments:
+  FASTQ directory       File path to directory containing fastq files
+                        (default: None)
+  Config template       File path to config file template used to generate
+                        config files. (default: None)
+  Config file           File path to config file to be used for snakemake.
+                        (default: None)
+  Sample/target map     File path to Excel file containing samples and present
+                        targets (default: None)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --sample [Sample column]
+                        Column name of column containg NWGC sample IDs
+                        (default: sample)
+  --target [Target column]
+                        Column name of column containing target identifiers
+                        (default: target)
+  --max_difference [Max percent difference]
+                        The maximum difference acceptable between R1 and R2
+                        reads (default: 0)
+  --lane [Lane]         Specify the specific lane if samples only come from a
+                        single lane. (default: None)
+```
+__Note__: This currently only works for flu-positive samples. To add more targets/references, edit `references/target_reference_map.json`.
+
+__Check Read Pairs__
+Embedded in this script is a check to ensure that the reads in R1 and R2 of each sample match. This is to avoid the demultiplexing error described in [this paper](https://www.nature.com/articles/s41588-019-0349-3). If the reads do not match 100% then the sample will be added to the ignored samples. Redirect the output to a file to keep track of read differences and ignored samples.
+
+__Running Batch Jobs__:
 ```
 snakemake --configfile config/config-flu-only.json -k
 ```
@@ -130,6 +138,66 @@ snakemake -w 60 --configfile config/config-flu-only.json --cluster-config config
 ```
 
 You can use `--use-conda` if there are rule-specific environment files.
+
+## Single Sample/Target Jobs
+Single sample/target pair jobs template is `config/one-sample-template.json`
+
+* `fastq_files`: an array of absolute paths for FASTQ files of a single sample
+* `sample`: the NWGC ID assigned to the sample, must be contained in the filename of the fastq_files
+* `references`: an array of references
+* `barcode_match`: the filepath to the key/value matching of NWGC ID to SFS UUID
+
+**Setup Config File**
+Single sample/target pair jobs require a different config file than the one for batch jobs:
+```
+usage: setup_config_for_one_sample_target_pair.py [-h] --config-template
+                                                  <config_template.json>
+                                                  --config-file <config.json>
+                                                  --fastq-file
+                                                  <sample.fastq.gz>
+                                                  [<sample.fastq.gz> ...]
+                                                  --nwgc-id [NWGC_ID]
+                                                  --sfs-uuid [SFS_UUID]
+                                                  --target [TARGET]
+                                                  [--target-ref-map [TARGET_REF_MAP]]
+
+Creates a config file for Snakemake for one sample/reference pair.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --config-template <config_template.json>
+                        File path to config file template (default: None)
+  --config-file <config.json>
+                        File path to config file to be used for snakemake
+                        (default: None)
+  --fastq-file <sample.fastq.gz> [<sample.fastq.gz> ...]
+                        File path to fastq file. Expected format of fastq
+                        filename: '346757_10DB_288_S281_L001_R1_001.fastq.gz
+                        (default: None)
+  --nwgc-id [NWGC_ID]   NWGC ID for the sample that matches ID in fastq
+                        filename (default: None)
+  --sfs-uuid [SFS_UUID]
+                        The SFS UUID of the sample. (default: None)
+  --target [TARGET]     The target to be used as reference in the assembly
+                        pipeline (default: None)
+  --target-ref-map [TARGET_REF_MAP]
+                        The JSON file that contains the target/reference map
+                        (default: references/target_reference_map.json)
+```
+__Check Read Pairs__
+Embedded in the set up config script is a check that reads in R1 and R2 of each lane match 100%. If they do not match, then the script will error out.
+
+__Running Single Sample/Target Jobs__:
+```
+snakemake --snakefile Snakefile_one_sample --configfile config/config-flu-only.json -k
+```
+OR (if on Rhino)
+```
+snakemake --snakefile Snakefile_one_sample -w 60 --configfile config/config-flu-only.json --cluster-config config/cluster.json --cluster "sbatch --nodes=1 --tasks=1 --mem={cluster.memory} --cpus-per-task={cluster.cores} --tmp={cluster.disk} --time={cluster.time} -o all_output.out" -j 20 -k
+```
+
+You can use `--use-conda` if there are rule-specific environment files.
+
 
 ## Basic Steps
 

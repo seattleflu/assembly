@@ -98,7 +98,7 @@ def aggregate_input(wildcards):
         if float(f.read().strip()[:3]) < config["min_align_rate"]:
             return "summary/not_mapped/{reference}/{sample}.txt"
         else:
-            return "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+            return "consensus_genomes/{reference}/{sample}.http-response.log"
 
 # Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
@@ -121,9 +121,6 @@ rule all:
         aggregate = expand("summary/aggregate/{reference}/{sample}.log", filtered_product,
                 sample=all_ids,
                 reference=all_references),
-        log = expand("consensus_genomes/{reference}/{sample}.http-response.log", filtered_product,
-                sample=all_ids,
-                reference=all_references)
 
 rule index_reference_genome:
     input:

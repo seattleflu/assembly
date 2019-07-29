@@ -304,7 +304,7 @@ checkpoint align_rate:
     input:
         bt2_log = rules.map.output.bt2_log
     output:
-        temp("summary/align_rate/{reference}/{sample}.txt")
+        align_rate = "summary/align_rate/{reference}/{sample}.txt"
     shell:
         """
         tail -n 1 {input}  > {output}

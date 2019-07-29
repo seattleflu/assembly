@@ -44,7 +44,11 @@ Adapted from Louise Moncla's illumina pipeline for influenza snp calling:
 https://github.com/lmoncla/illumina_pipeline
 """
 import sys, os
+import json
 import glob
+import requests
+from requests.exceptions import HTTPError
+from urllib.parse import urljoin
 from datetime import datetime
 from itertools import product
 
@@ -100,7 +104,7 @@ def aggregate_input(wildcards):
         if mapped <= min_reads:
             return "summary/not_mapped/{reference}/{sample}.txt"
         else:
-            return "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+            return "consensus_genomes/{reference}/{sample}.http-response.log"
 
 # Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
@@ -122,7 +126,7 @@ rule all:
                reference=all_references),
         aggregate = expand("summary/aggregate/{reference}/{sample}.log", filtered_product,
                 sample=all_ids,
-                reference=all_references)
+                reference=all_references),
 
 rule index_reference_genome:
     input:
@@ -475,7 +479,94 @@ rule fasta_headers:
             else print; }}' \
             {output.masked_consensus} > temp_{wildcards.sample}.fasta
         mv temp_{wildcards.sample}.fasta {output.masked_consensus}
+
         """
+
+rule metadata_to_json:
+    input:
+        all_r1 = lambda wildcards: mapped[wildcards.sample][0],
+        all_r2 = lambda wildcards: mapped[wildcards.sample][1]
+    output:
+        temp("consensus_genomes/{reference}/{sample}.metadata.json")
+    shell:
+        """
+        python scripts/metadata_to_json.py {input.all_r1:q} {input.all_r2:q} > {output}
+        """
+
+rule masked_consensus_to_json:
+    input:
+        masked_consensus = rules.fasta_headers.output.masked_consensus
+    output:
+        temp("consensus_genomes/{reference}/{sample}.masked_consensus.json")
+    shell:
+        """
+        python scripts/fasta_to_json.py {input.masked_consensus} > {output}
+        """
+
+rule summary_stats_to_json:
+    input:
+        bam_coverage = rules.bamstats.output.bamstats_file,
+        bowtie2 = rules.map.output.bt2_log
+    output:
+        temp("consensus_genomes/{reference}/{sample}.summary_stats.json")
+    shell:
+        """
+        python scripts/summary_stats_to_json.py --bamstats {input.bam_coverage} \
+            --bowtie2 {input.bowtie2} > {output}
+        """
+
+rule create_id3c_payload:
+    input:
+        metadata = rules.metadata_to_json.output,
+        masked_consensus = rules.masked_consensus_to_json.output,
+        summary_stats = rules.summary_stats_to_json.output
+    params:
+        status = 'complete'
+    output:
+        "consensus_genomes/{reference}/{sample}.payload.json"
+    shell:
+        """
+        python scripts/create_id3c_payload.py \
+            --masked-consensus {input.masked_consensus} \
+            --summary-stats {input.summary_stats} \
+            --metadata {input.metadata} \
+            --status {params.status} > {output}
+        """
+
+rule post_masked_consensus_and_summary_stats_to_id3c:
+    input:
+        rules.create_id3c_payload.output
+    params:
+        id3c_url = os.environ['ID3C_URL'],
+        id3c_username = os.environ['ID3C_USERNAME'],
+        id3c_password = os.environ['ID3C_PASSWORD'],
+    log: "consensus_genomes/{reference}/{sample}.http-response.log"
+    run:
+        headers = {'Content-type': 'application/json'}
+        file = open(str(log), "w")
+
+        with open(str(input)) as f:
+            data = f.read()
+
+        try:
+            response = requests.post(
+                urljoin(params.id3c_url, '/v1/receiving/consensus-genome'),
+                data=data,
+                headers=headers,
+                auth=(params.id3c_username, params.id3c_password))
+
+            response.raise_for_status()
+
+        except HTTPError as http_err:
+            file.write(str(http_err))
+
+        except Exception as err:
+            file.write(str(err))
+
+            raise Exception(f"Error: {err} in ID3C POST request.")
+
+        finally:
+            file.close()
 
 rule combined_fasta:
     output:

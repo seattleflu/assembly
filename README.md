@@ -211,3 +211,15 @@ The input of this rule differs based on the result of the checkpoint, so this ru
 
 ### Clean
 Deletes all of the intermediate directories and files generated from running the pipeline. The only one that it does not delete is the `consensus_genome` directory.
+
+
+## Advanced Steps
+### Upload to id3c
+Consensus genomes can be uploaded to [id3c] with the correct id3c permissions stored as environment
+variables. Note: id3c uses basic authentication. More information can be found in the [id3c
+documentation].
+
+
+
+[id3c]: http://github.com/seattleflu/id3c
+[id3c documentation]: https://github.com/seattleflu/id3c/blob/master/README.md

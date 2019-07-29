@@ -83,6 +83,8 @@
         "h3n2_Texas_50_2012": {},
         "yam_Wisconsin_01_2010": {}
       },
+    "id3c-consensus-genome-post-url": "http://localhost:5000/v1/receiving/consensus-genome",
+    "id3c-username-and-password": "test:123",
     "params" :
       {
         "trimmomatic" :

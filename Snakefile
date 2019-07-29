@@ -119,6 +119,9 @@ rule all:
                reference=all_references),
         aggregate = expand("summary/aggregate/{reference}/{sample}.log", filtered_product,
                 sample=all_ids,
+                reference=all_references),
+        log = expand("consensus_genomes/{reference}/{sample}.http-response.log", filtered_product,
+                sample=all_ids,
                 reference=all_references)
 
 rule index_reference_genome:
@@ -463,6 +466,81 @@ rule fasta_headers:
             else print; }}' \
             {output.masked_consensus} > temp_{wildcards.sample}.fasta
         mv temp_{wildcards.sample}.fasta {output.masked_consensus}
+
+        """
+
+rule metadata_to_json:
+    input:
+        all_r1 = lambda wildcards: mapped[wildcards.sample][0],
+        all_r2 = lambda wildcards: mapped[wildcards.sample][1]
+    output:
+        temp("consensus_genomes/{reference}/{sample}.metadata.json")
+    shell:
+        """
+        python scripts/metadata_to_json.py "{input.all_r1}" "{input.all_r2}" > {output}
+        """
+
+rule masked_consensus_to_json:
+    input:
+        masked_consensus = rules.fasta_headers.output.masked_consensus
+    output:
+        temp("consensus_genomes/{reference}/{sample}.masked_consensus.json")
+    shell:
+        """
+        python scripts/fasta_to_json.py {input.masked_consensus} > {output}
+        """
+
+rule summary_stats_to_json:
+    input:
+        bam_coverage = rules.bamstats.output.bamstats_file,
+        bowtie2 = rules.map.output.bt2_log
+    output:
+        temp("consensus_genomes/{reference}/{sample}.summary_stats.json")
+    shell:
+        """
+        python scripts/summary_stats_to_json.py --bamstats {input.bam_coverage} \
+            --bowtie2 {input.bowtie2} > {output}
+        """
+
+checkpoint create_id3c_payload:
+    input:
+        metadata = rules.metadata_to_json.output,
+        masked_consensus = rules.masked_consensus_to_json.output,
+        summary_stats = rules.summary_stats_to_json.output
+    params:
+        status = 'complete'
+    output:
+        "consensus_genomes/{reference}/{sample}.payload.json"
+    shell:
+        """
+        python scripts/create_id3c_payload.py \
+            --masked-consensus {input.masked_consensus} \
+            --summary-stats {input.summary_stats} \
+            --metadata {input.metadata} \
+            --status {params.status} > {output}
+        """
+
+rule post_masked_consensus_and_summary_stats_to_id3c:
+    input:
+        rules.create_id3c_payload.output
+    params:
+        id3c_url = config['id3c-consensus-genome-post-url'],
+        id3c_username_and_password = config['id3c-username-and-password'],
+        id3c_expected_response_code = 204
+    log: "consensus_genomes/{reference}/{sample}.http-response.log"
+    shell:
+        """
+        response=$(curl {params.id3c_url} \
+            --header "Content-Type: application/json" \
+            --data-binary @{input} \
+            --user {params.id3c_username_and_password} \
+            --write-out "%{{http_code}}\n" \
+            --output {log})
+        if [ "$response" != "{params.id3c_expected_response_code}" ]
+        then
+            echo "Something went wrong in the ID3C POST request.\nSee {log} for more information."
+            exit $response
+        fi
         """
 
 rule combined_fasta:

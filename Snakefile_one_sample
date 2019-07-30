@@ -59,7 +59,7 @@ def aggregate_input(wildcards):
         mapped = summary["mapped_reads"]
 
         if not all_segments_aligned or mapped <= min_reads:
-            return rules.not_mapped.output.not_mapped
+            return rules.post_not_mapped_to_id3c.output.successful_post
         else:
             return rules.post_masked_consensus_and_summary_stats_to_id3c.output.successful_post
 
@@ -96,6 +96,17 @@ rule index_reference_genome:
     shell:
         """
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
+        """
+
+rule metadata_to_json:
+    input:
+        all_r1 = config["fastq_files"]["R1"],
+        all_r2 = config["fastq_files"]["R2"]
+    output:
+        temp("{date}/consensus_genomes/{reference}/{sample}.metadata.json")
+    shell:
+        """
+        python scripts/metadata_to_json.py "{input.all_r1}" "{input.all_r2}" > {output}
         """
 
 rule merge_lanes:
@@ -243,14 +254,31 @@ checkpoint align_rate:
 
 rule not_mapped:
     input:
-        sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta",
-        temp = "{date}/summary/align_rate/{reference}/{sample}.txt"
+        metadata = rules.metadata_to_json.output,
+        nwgc_sfs_map = config["barcode_match"]
     output:
-        not_mapped = "{date}/summary/not_mapped/{reference}/{sample}.txt"
+        not_mapped = "{date}/summary/not_mapped/{reference}/{sample}.json"
     shell:
         """
-        cat {input.temp} > {output.not_mapped}
+        python scripts/create_not_mapped_payload.py \
+            --metadata {input.metadata} \
+            --reference {wildcards.reference} \
+            --nwgc-sfs-map {input.nwgc_sfs_map} > {output.not_mapped}
+        """
+
+rule post_not_mapped_to_id3c:
+    input:
+        rules.not_mapped.output.not_mapped
+    output:
+        successful_post = "{date}/summary/not_mapped/{reference}/{sample}.successful-post.log"
+    log:
+        "{date}/summary/not_mapped/{reference}/{sample}.http-response.log"
+    shell:
+        """
+        python scripts/post_to_id3c.py \
+            --payload {input} \
+            --output {output} \
+            --http-response {log}
         """
 
 rule pileup:
@@ -383,17 +411,6 @@ rule fasta_headers:
             {output.masked_consensus} > temp_{wildcards.sample}.fasta
         mv temp_{wildcards.sample}.fasta {output.masked_consensus}
 
-        """
-
-rule metadata_to_json:
-    input:
-        all_r1 = config["fastq_files"]["R1"],
-        all_r2 = config["fastq_files"]["R2"]
-    output:
-        temp("{date}/consensus_genomes/{reference}/{sample}.metadata.json")
-    shell:
-        """
-        python scripts/metadata_to_json.py "{input.all_r1}" "{input.all_r2}" > {output}
         """
 
 rule masked_consensus_to_json:

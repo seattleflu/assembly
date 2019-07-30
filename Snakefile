@@ -96,7 +96,7 @@ def aggregate_input(wildcards):
     """
     with open(checkpoints.align_rate.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
         if float(f.read().strip()[:3]) < config["min_align_rate"]:
-            return "summary/not_mapped/{reference}/{sample}.txt"
+            return "summary/not_mapped/{reference}/{sample}.http-response.log"
         else:
             return "consensus_genomes/{reference}/{sample}.http-response.log"
 
@@ -309,14 +309,47 @@ checkpoint align_rate:
 
 rule not_mapped:
     input:
-        sorted_bam = rules.sort.output.sorted_bam_file,
         reference = "references/{reference}.fasta",
-        temp = "summary/align_rate/{reference}/{sample}.txt"
+        metadata = "consensus_genomes/{reference}/{sample}.metadata.json",
+        nwgc_sfs_map = config["barcode_match"]["key_value_filepath"]
     output:
-        not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
+        not_mapped = "summary/not_mapped/{reference}/{sample}.json"
     shell:
         """
-        cat {input.temp} > {output.not_mapped}
+        python scripts/create_not_mapped_payload.py \
+            --metadata {input.metadata} \
+            --reference {wildcards.reference} \
+            --nwgc-sfs-map {input.nwgc_sfs_map} > {output.not_mapped}
+        """
+
+rule post_not_mapped_to_id3c:
+    input:
+        rules.not_mapped.output.not_mapped
+    params:
+        id3c_url = config['id3c-consensus-genome-post-url'],
+        id3c_username_and_password = config['id3c-username-and-password'],
+        id3c_expected_response_code = 204,
+        id3c_slack_webhook = config['id3c-alerts-slack-webhook'],
+        user = getpass.getuser()
+    log: "summary/not_mapped/{reference}/{sample}.http-response.log"
+    shell:
+        """
+        response=$(curl {params.id3c_url} \
+            --header "Content-Type: application/json" \
+            --data-binary @{input} \
+            --user {params.id3c_username_and_password} \
+            --write-out "%{{http_code}}\n" \
+            --output {log})
+        if [ "$response" != "{params.id3c_expected_response_code}" ]
+        then
+            echo "Something went wrong in the ID3C POST request.\nSee {log} for more information."
+            curl -X POST -H 'Content-type: application/json' \
+                --data '{{"text": \
+                ":rotating_light: @{params.user} Assembly failed to upload to ID3C.\nMore details at `{log}`"}}' \
+                {params.id3c_slack_webhook}
+
+            exit $response
+        fi
         """
 
 rule pileup:

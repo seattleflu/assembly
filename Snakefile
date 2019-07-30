@@ -134,6 +134,33 @@ rule index_reference_genome:
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
         """
 
+rule nwgc_sfs_map:
+    params:
+        mapper_file = config["barcode_match"]["mapper_filepath"],
+        nwgc_column = config["barcode_match"]["nwgc_column"],
+        sfs_column = config["barcode_match"]["sfs_column"],
+    output:
+        key_value_file = config["barcode_match"]["key_value_filepath"]
+    shell:
+        """
+        python scripts/id_barcode_key_value.py \
+            {params.mapper_file} \
+            {params.nwgc_column} \
+            {params.sfs_column} \
+            {output.key_value_file}
+        """
+
+rule metadata_to_json:
+    input:
+        all_r1 = lambda wildcards: mapped[wildcards.sample][0],
+        all_r2 = lambda wildcards: mapped[wildcards.sample][1]
+    output:
+        temp("consensus_genomes/{reference}/{sample}.metadata.json")
+    shell:
+        """
+        python scripts/metadata_to_json.py "{input.all_r1}" "{input.all_r2}" > {output}
+        """
+
 rule merge_lanes:
     input:
         all_r1 = lambda wildcards: mapped[wildcards.sample][0],
@@ -310,8 +337,8 @@ checkpoint align_rate:
 rule not_mapped:
     input:
         reference = "references/{reference}.fasta",
-        metadata = "consensus_genomes/{reference}/{sample}.metadata.json",
-        nwgc_sfs_map = config["barcode_match"]["key_value_filepath"]
+        metadata = rules.metadata_to_json.output,
+        nwgc_sfs_map = rules.nwgc_sfs_map.output.key_value_file
     output:
         not_mapped = "summary/not_mapped/{reference}/{sample}.json"
     shell:
@@ -462,22 +489,6 @@ rule mask_consensus:
             -fo {output.masked_consensus}
         """
 
-rule nwgc_sfs_map:
-    params:
-        mapper_file = config["barcode_match"]["mapper_filepath"],
-        nwgc_column = config["barcode_match"]["nwgc_column"],
-        sfs_column = config["barcode_match"]["sfs_column"],
-    output:
-        key_value_file = config["barcode_match"]["key_value_filepath"]
-    shell:
-        """
-        python scripts/id_barcode_key_value.py \
-            {params.mapper_file} \
-            {params.nwgc_column} \
-            {params.sfs_column} \
-            {output.key_value_file}
-        """
-
 rule fasta_headers:
     input:
         key_value_file = rules.nwgc_sfs_map.output,
@@ -498,17 +509,6 @@ rule fasta_headers:
             {output.masked_consensus} > temp_{wildcards.sample}.fasta
         mv temp_{wildcards.sample}.fasta {output.masked_consensus}
 
-        """
-
-rule metadata_to_json:
-    input:
-        all_r1 = lambda wildcards: mapped[wildcards.sample][0],
-        all_r2 = lambda wildcards: mapped[wildcards.sample][1]
-    output:
-        temp("consensus_genomes/{reference}/{sample}.metadata.json")
-    shell:
-        """
-        python scripts/metadata_to_json.py "{input.all_r1}" "{input.all_r2}" > {output}
         """
 
 rule masked_consensus_to_json:

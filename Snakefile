@@ -43,13 +43,8 @@ Basic steps:
 Adapted from Louise Moncla's illumina pipeline for influenza snp calling:
 https://github.com/lmoncla/illumina_pipeline
 """
-import sys, os
 import json
 import glob
-import getpass
-import requests
-from requests.exceptions import HTTPError
-from urllib.parse import urljoin
 from datetime import datetime
 from itertools import product
 
@@ -543,58 +538,15 @@ rule post_masked_consensus_and_summary_stats_to_id3c:
         rules.create_id3c_payload.output
     output:
         successful_post = "consensus_genomes/{reference}/{sample}.successful-post.log"
-    params:
-        id3c_url = os.environ['ID3C_URL'],
-        id3c_username = os.environ['ID3C_USERNAME'],
-        id3c_password = os.environ['ID3C_PASSWORD'],
-        id3c_slack_webhook = os.environ['SLACK_WEBHOOK_URL'],
-    log: "consensus_genomes/{reference}/{sample}.http-response.log"
-    run:
-        headers = {'Content-type': 'application/json'}
-        file = open(str(log), "w")
-
-        with open(str(input)) as f:
-            data = f.read()
-
-        try:
-            response = requests.post(
-                urljoin(params.id3c_url, 'v1/receiving/consensus-genome'),
-                data=data,
-                headers=headers,
-                auth=(params.id3c_username, params.id3c_password))
-
-            response.raise_for_status()
-
-            if response.ok:
-                with open(str(output), "w"):
-                    pass
-
-        except HTTPError as http_err:
-            file.write(str(http_err))
-
-            slack_data = { "text":
-                f":rotating_light: Hey {getpass.getuser()}: Assembly failed to upload to ID3C with HTTP status code: " +
-                f"{http_err.response.status_code}.\nMore details at `{log}`"
-            }
-
-            try:
-                slack_response = requests.post(params.id3c_slack_webhook,
-                    data=json.dumps(slack_data), headers=headers)
-
-                slack_response.raise_for_status()
-
-            except HTTPError as slack_http_err:
-                file.write(str(slack_http_err))
-
-            raise http_err
-
-        except Exception as err:
-            file.write(str(err))
-
-            raise Exception(f"Error: {err} in ID3C POST request.")
-
-        finally:
-            file.close()
+    log:
+        "consensus_genomes/{reference}/{sample}.http-response.log"
+    shell:
+        """
+        python scripts/post_to_id3c.py \
+            --payload {input} \
+            --output {output} \
+            --http-response {log}
+        """
 
 rule combined_fasta:
     output:

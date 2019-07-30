@@ -55,7 +55,7 @@ def aggregate_input(wildcards):
     """
     with open(checkpoints.align_rate.get(sample=wildcards.sample, reference=wildcards.reference, date=wildcards.date).output[0]) as f:
         if float(f.read().strip()[:3]) < config["min_align_rate"]:
-            return "{date}/summary/not_mapped/{reference}/{sample}.txt"
+            return "{date}/summary/not_mapped/{reference}/{sample}.http-response.log"
         else:
             return "{date}/consensus_genomes/{reference}/{sample}.http-response.log"
 
@@ -92,6 +92,17 @@ rule index_reference_genome:
     shell:
         """
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
+        """
+
+rule metadata_to_json:
+    input:
+        all_r1 = config["fastq_files"]["R1"],
+        all_r2 = config["fastq_files"]["R2"]
+    output:
+        temp("{date}/consensus_genomes/{reference}/{sample}.metadata.json")
+    shell:
+        """
+        python scripts/metadata_to_json.py "{input.all_r1}" "{input.all_r2}" > {output}
         """
 
 rule merge_lanes:
@@ -239,14 +250,46 @@ checkpoint align_rate:
 
 rule not_mapped:
     input:
-        sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta",
-        temp = "{date}/summary/align_rate/{reference}/{sample}.txt"
+        metadata = rules.metadata_to_json.output,
+        nwgc_sfs_map = config["barcode_match"]
     output:
-        not_mapped = "{date}/summary/not_mapped/{reference}/{sample}.txt"
+        not_mapped = "{date}/summary/not_mapped/{reference}/{sample}.json"
     shell:
         """
-        cat {input.temp} > {output.not_mapped}
+        python scripts/create_not_mapped_payload.py \
+            --metadata {input.metadata} \
+            --reference {wildcards.reference} \
+            --nwgc-sfs-map {input.nwgc_sfs_map} > {output.not_mapped}
+        """
+
+rule post_not_mapped_to_id3c:
+    input:
+        rules.not_mapped.output.not_mapped
+    params:
+        id3c_url = config['id3c-consensus-genome-post-url'],
+        id3c_username_and_password = config['id3c-username-and-password'],
+        id3c_expected_response_code = 204,
+        id3c_slack_webhook = config['id3c-alerts-slack-webhook'],
+        user = getpass.getuser()
+    log: "{date}/summary/not_mapped/{reference}/{sample}.http-response.log"
+    shell:
+        """
+        response=$(curl {params.id3c_url} \
+            --header "Content-Type: application/json" \
+            --data-binary @{input} \
+            --user {params.id3c_username_and_password} \
+            --write-out "%{{http_code}}\n" \
+            --output {log})
+        if [ "$response" != "{params.id3c_expected_response_code}" ]
+        then
+            echo "Something went wrong in the ID3C POST request.\nSee {log} for more information."
+            curl -X POST -H 'Content-type: application/json' \
+                --data '{{"text": \
+                ":rotating_light: @{params.user} Assembly failed to upload to ID3C.\nMore details at `{log}`"}}' \
+                {params.id3c_slack_webhook}
+
+            exit $response
+        fi
         """
 
 rule pileup:
@@ -379,17 +422,6 @@ rule fasta_headers:
             {output.masked_consensus} > temp_{wildcards.sample}.fasta
         mv temp_{wildcards.sample}.fasta {output.masked_consensus}
 
-        """
-
-rule metadata_to_json:
-    input:
-        all_r1 = config["fastq_files"]["R1"],
-        all_r2 = config["fastq_files"]["R2"]
-    output:
-        temp("{date}/consensus_genomes/{reference}/{sample}.metadata.json")
-    shell:
-        """
-        python scripts/metadata_to_json.py "{input.all_r1}" "{input.all_r2}" > {output}
         """
 
 rule masked_consensus_to_json:

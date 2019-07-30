@@ -1,0 +1,521 @@
+"""Snakefile for one sample/target pair
+
+Processes input fastq files to create consensus genomes and their associated
+summary statistics for the Seattle Flu Study.
+
+Install and activate the appropriate environment for the pipeline using
+Conda (https://conda.io/en/latest/):
+    $ conda env create -f envs/seattle-flu-environment.yaml
+    $ conda activate seattle-flu
+
+Before running perform a dry-run to test that all input files are correctly
+located and that the Snakemake DAG builds correctly:
+    $ snakemake -n
+
+To run on a local machine:
+    $ snakemake -k
+
+To run on the Fred Hutch cluster (Rhino):
+    $ snakemake \
+        -w 60 \
+        --cluster-config config/cluster.json \
+        --cluster "sbatch \
+            --nodes=1 \
+            --tasks=1 \
+            --mem={cluster.memory} \
+            --cpus-per-task={cluster.cores} \
+            --tmp={cluster.disk} \
+            --time={cluster.time} \
+            -o all_output.out" \
+        -j 20 \
+        -k
+
+Basic steps:
+    1. Trim raw fastq's with Trimmomatic
+    2. Map trimmed reads to each reference genomes in the reference panel using
+       bowtie2 # This step may change with time
+    ~3. Remove duplicate reads using Picard~
+    4. Call SNPs using varscan
+    5. Use SNPs to generate full consensus genomes for each sample x reference
+       virus combination
+    6. Compute summary statistics for each sample x refernce virus combination
+
+Adapted from Louise Moncla's illumina pipeline for influenza snp calling:
+https://github.com/lmoncla/illumina_pipeline
+"""
+import os
+import json
+import getpass
+import requests
+from datetime import datetime
+from requests.exceptions import HTTPError
+from urllib.parse import urljoin
+
+
+# input function for the rule aggregate
+def aggregate_input(wildcards):
+    """
+    Returns input for rule aggregate based on output from checkpoint align_rate.
+    Set minimum align rate in config under "min_align_rate".
+    """
+    with open(checkpoints.align_rate.get(sample=wildcards.sample, reference=wildcards.reference, date=wildcards.date).output[0]) as f:
+        summary = json.load(f)
+        all_segments_aligned = summary["all_segments_aligned"]
+        min_reads = summary["minimum_reads_required"]
+        mapped = summary["mapped_reads"]
+
+        if not all_segments_aligned or mapped <= min_reads:
+            return rules.not_mapped.output.not_mapped
+        else:
+            return rules.post_masked_consensus_and_summary_stats_to_id3c.output.successful_post
+
+sample = config["sample"]
+references = config["references"]
+date=datetime.now().date()
+
+#### Main pipeline
+rule all:
+    input:
+        # pre_fastqc = expand("summary/pre_trim_fastqc/{fname}_fastqc.html",
+        #        fname=glob.glob(config['fastq_directory']),
+        post_fastqc = expand("{date}/summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
+               date=date,
+               sample=sample,
+               tr=["1P", "1U", "2P", "2U"],
+               ext=["zip", "html"]),
+        bamstats = expand("{date}/summary/bamstats/{reference}/{sample}.coverage_stats.txt",
+               date=date,
+               sample=sample,
+               reference=references),
+        aggregate = expand("{date}/summary/aggregate/{reference}/{sample}.log",
+                date=date,
+                sample=sample,
+                reference=references)
+
+rule index_reference_genome:
+    input:
+        raw_reference = "references/{reference}.fasta"
+    output:
+        indexed_reference = "references/{reference}.1.bt2"
+    # group:
+    #     "pre-mapping"
+    shell:
+        """
+        bowtie2-build {input.raw_reference} references/{wildcards.reference}
+        """
+
+rule merge_lanes:
+    input:
+        all_r1 = config["fastq_files"]["R1"],
+        all_r2 = config["fastq_files"]["R2"]
+    output:
+        merged_r1 = "{date}/process/merged/{sample}_R1.fastq.gz",
+        merged_r2 = "{date}/process/merged/{sample}_R2.fastq.gz"
+    # group:
+    #     "pre-mapping"
+    shell:
+        """
+        cat {input.all_r1} >> {output.merged_r1}
+        cat {input.all_r2} >> {output.merged_r2}
+        """
+
+rule trim_fastqs:
+    input:
+        fastq_f = "{date}/process/merged/{sample}_R1.fastq.gz",
+        fastq_r = "{date}/process/merged/{sample}_R2.fastq.gz"
+    output:
+        trimmed_fastq_1p = "{date}/process/trimmed/{sample}.trimmed_1P.fastq",
+        trimmed_fastq_2p = "{date}/process/trimmed/{sample}.trimmed_2P.fastq",
+        trimmed_fastq_1u = "{date}/process/trimmed/{sample}.trimmed_1U.fastq",
+        trimmed_fastq_2u = "{date}/process/trimmed/{sample}.trimmed_2U.fastq"
+    params:
+        paired_end = config["params"]["trimmomatic"]["paired_end"],
+        adapters = config["params"]["trimmomatic"]["adapters"],
+        illumina_clip = config["params"]["trimmomatic"]["illumina_clip"],
+        window_size = config["params"]["trimmomatic"]["window_size"],
+        trim_qscore = config["params"]["trimmomatic"]["trim_qscore"],
+        minimum_length = config["params"]["trimmomatic"]["minimum_length"]
+    benchmark:
+        "{date}/benchmarks/{sample}.trimmo"
+    # group:
+    #     "trim-and-map"
+    shell:
+        """
+        trimmomatic \
+            {params.paired_end} \
+            -phred33 \
+            {input.fastq_f} {input.fastq_r} \
+            -baseout {wildcards.date}/process/trimmed/{wildcards.sample}.trimmed.fastq \
+            ILLUMINACLIP:{params.adapters}:{params.illumina_clip} \
+            SLIDINGWINDOW:{params.window_size}:{params.trim_qscore} \
+            MINLEN:{params.minimum_length}
+        """
+
+rule post_trim_fastqc:
+    input:
+        p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
+        p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
+        u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
+        u2 = rules.trim_fastqs.output.trimmed_fastq_2u
+    output:
+        qc_1p_html = "{date}/summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.html",
+        qc_2p_html = "{date}/summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.html",
+        qc_1u_html = "{date}/summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.html",
+        qc_2u_html = "{date}/summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.html",
+        qc_1p_zip = "{date}/summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.zip",
+        qc_2p_zip = "{date}/summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
+        qc_1u_zip = "{date}/summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
+        qc_2u_zip = "{date}/summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
+    # group:
+    #     "summary-statistics"
+    shell:
+        """
+        fastqc {input.p1} -o {wildcards.date}/summary/post_trim_fastqc
+        fastqc {input.p2} -o {wildcards.date}/summary/post_trim_fastqc
+        fastqc {input.u1} -o {wildcards.date}/summary/post_trim_fastqc
+        fastqc {input.u2} -o {wildcards.date}/summary/post_trim_fastqc
+        """
+
+rule map:
+    input:
+        p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
+        p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
+        u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
+        u2 = rules.trim_fastqs.output.trimmed_fastq_2u,
+        ref_file = rules.index_reference_genome.output.indexed_reference
+    output:
+        mapped_bam_file = "{date}/process/mapped/{reference}/{sample}.bam",
+        bt2_log = "{date}/summary/bowtie2/{reference}/{sample}.log"
+    params:
+        threads = config["params"]["bowtie2"]["threads"],
+        map_all = config["params"]["bowtie2"]["all"]
+    benchmark:
+        "{date}/benchmarks/{sample}_{reference}.bowtie2"
+    # group:
+    #     "trim-and-map"
+    shell:
+        """
+        bowtie2 \
+            -x references/{wildcards.reference} \
+            -1 {input.p1} \
+            -2 {input.p2} \
+            -U {input.u1},{input.u2} \
+            -P {params.threads} \
+            {params.map_all} \
+            --local 2> {output.bt2_log} | \
+                samtools view -bSF4 - > {output.mapped_bam_file}
+        """
+
+rule sort:
+    input:
+        mapped_bam = rules.map.output.mapped_bam_file
+    output:
+        sorted_bam_file = "{date}/process/sorted/{reference}/{sample}.sorted.bam"
+    benchmark:
+        "{date}/benchmarks/{sample}_{reference}.sort"
+    # group:
+    #     "post-mapping"
+    shell:
+        """
+        samtools view \
+            -bS {input.mapped_bam} | \
+            samtools sort | \
+            samtools view -h > {output.sorted_bam_file}
+        """
+
+rule bamstats:
+    input:
+        sorted_bam = rules.sort.output.sorted_bam_file
+    output:
+        bamstats_file = "{date}/summary/bamstats/{reference}/{sample}.coverage_stats.txt"
+    benchmark:
+        "{date}/benchmarks/{sample}_{reference}.bamstats"
+    # group:
+    #     "summary-statistics"
+    shell:
+        """
+        BAMStats -i {input.sorted_bam} > {output.bamstats_file}
+        """
+
+checkpoint align_rate:
+    input:
+        bt2_log = rules.map.output.bt2_log
+    output:
+        align_rate = "{date}/summary/align_rate/{reference}/{sample}.txt"
+    shell:
+        """
+        tail -n 1 {input}  > {output}
+        """
+
+rule not_mapped:
+    input:
+        sorted_bam = rules.sort.output.sorted_bam_file,
+        reference = "references/{reference}.fasta",
+        temp = "{date}/summary/align_rate/{reference}/{sample}.txt"
+    output:
+        not_mapped = "{date}/summary/not_mapped/{reference}/{sample}.txt"
+    shell:
+        """
+        cat {input.temp} > {output.not_mapped}
+        """
+
+rule pileup:
+    input:
+        sorted_bam = rules.sort.output.sorted_bam_file,
+        reference = "references/{reference}.fasta",
+        temp = "{date}/summary/align_rate/{reference}/{sample}.txt"
+    output:
+        pileup = "{date}/process/mpileup/{reference}/{sample}.pileup"
+    params:
+        depth = config["params"]["mpileup"]["depth"],
+        min_base_qual = config["params"]["varscan"]["snp_qual_threshold"]
+    benchmark:
+        "{date}/benchmarks/{sample}_{reference}.mpileup"
+    # group:
+    #     "post-mapping"
+    shell:
+        """
+        samtools mpileup -a -A \
+            -Q {params.min_base_qual} \
+            -d {params.depth} \
+            {input.sorted_bam} > {output.pileup} \
+            -f {input.reference}
+        """
+
+rule call_snps:
+    input:
+        pileup = rules.pileup.output.pileup
+    output:
+        vcf = "{date}/process/vcfs/{reference}/{sample}.vcf"
+    params:
+        min_cov = config["params"]["varscan"]["min_cov"],
+        snp_qual_threshold = config["params"]["varscan"]["snp_qual_threshold"],
+        snp_frequency = config["params"]["varscan"]["snp_frequency"]
+    benchmark:
+        "{date}/benchmarks/{sample}_{reference}.varscan"
+    shell:
+        """
+        varscan mpileup2snp \
+            {input.pileup} \
+            --min-coverage {params.min_cov} \
+            --min-avg-qual {params.snp_qual_threshold} \
+            --min-var-freq {params.snp_frequency} \
+            --strand-filter 1 \
+            --output-vcf 1 > {output.vcf}
+        """
+
+rule zip_vcf:
+    input:
+        vcf = rules.call_snps.output.vcf
+    output:
+        bcf = "{date}/process/vcfs/{reference}/{sample}.vcf.gz"
+    shell:
+        """
+        bgzip {input.vcf}
+        """
+
+rule index_bcf:
+    input:
+        bcf = rules.zip_vcf.output.bcf
+    output:
+        index = "{date}/process/vcfs/{reference}/{sample}.vcf.gz.csi"
+    shell:
+        """
+        bcftools index {input}
+        """
+
+rule vcf_to_consensus:
+    input:
+        bcf = rules.zip_vcf.output.bcf,
+        index = rules.index_bcf.output.index,
+        ref = "references/{reference}.fasta"
+    output:
+        consensus_genome = "{date}/consensus_genomes/{reference}/{sample}.consensus.fasta"
+    benchmark:
+        "{date}/benchmarks/{sample}_{reference}.consensus"
+    shell:
+        """
+        cat {input.ref} | \
+            bcftools consensus {input.bcf} > \
+            {output.consensus_genome}
+        """
+
+rule create_bed_file:
+    input:
+        pileup = rules.pileup.output.pileup
+    output:
+        bed_file = "{date}/summary/low_coverage/{reference}/{sample}.bed"
+    params:
+        min_cov = config["params"]["varscan"]["min_cov"]
+    shell:
+        """
+        python scripts/create_bed_file_for_masking.py \
+            --pileup {input.pileup} \
+            --min-cov {params.min_cov} \
+            --bed-file {output.bed_file}
+        """
+
+rule mask_consensus:
+    input:
+        consensus_genome = rules.vcf_to_consensus.output.consensus_genome,
+        low_coverage = rules.create_bed_file.output.bed_file
+    output:
+        masked_consensus = temp("{date}/consensus_genomes/{reference}/{sample}.temp_consensus.fasta")
+    shell:
+        """
+        bedtools maskfasta \
+            -fi {input.consensus_genome} \
+            -bed {input.low_coverage} \
+            -fo {output.masked_consensus}
+        """
+
+rule fasta_headers:
+    input:
+        key_value_file = config["barcode_match"],
+        masked_consensus = rules.mask_consensus.output
+    output:
+        masked_consensus = "{date}/consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+    shell:
+        """
+        cat {input.masked_consensus} | \
+            perl -pi -e 's/(?<=>)[^>|]*(?<=|)/{wildcards.sample}/g' > \
+            temp_{wildcards.sample}.fasta
+        seqkit replace -p '({wildcards.sample})' -r '{{kv}}' \
+            -k {input.key_value_file} --keep-key \
+            temp_{wildcards.sample}.fasta > {output.masked_consensus}
+        awk '{{split(substr($0,2),a,"|"); \
+            if(a[2]) print ">"a[1]"|"a[1]"-"a[3]"|"a[2]"|"a[3]; \
+            else print; }}' \
+            {output.masked_consensus} > temp_{wildcards.sample}.fasta
+        mv temp_{wildcards.sample}.fasta {output.masked_consensus}
+
+        """
+
+rule metadata_to_json:
+    input:
+        all_r1 = config["fastq_files"]["R1"],
+        all_r2 = config["fastq_files"]["R2"]
+    output:
+        temp("{date}/consensus_genomes/{reference}/{sample}.metadata.json")
+    shell:
+        """
+        python scripts/metadata_to_json.py "{input.all_r1}" "{input.all_r2}" > {output}
+        """
+
+rule masked_consensus_to_json:
+    input:
+        masked_consensus = rules.fasta_headers.output.masked_consensus
+    output:
+        temp("{date}/consensus_genomes/{reference}/{sample}.masked_consensus.json")
+    shell:
+        """
+        python scripts/fasta_to_json.py {input.masked_consensus} > {output}
+        """
+
+rule summary_stats_to_json:
+    input:
+        bam_coverage = rules.bamstats.output.bamstats_file,
+        bowtie2 = rules.map.output.bt2_log
+    output:
+        temp("{date}/consensus_genomes/{reference}/{sample}.summary_stats.json")
+    shell:
+        """
+        python scripts/summary_stats_to_json.py --bamstats {input.bam_coverage} \
+            --bowtie2 {input.bowtie2} > {output}
+        """
+
+checkpoint create_id3c_payload:
+    input:
+        metadata = rules.metadata_to_json.output,
+        masked_consensus = rules.masked_consensus_to_json.output,
+        summary_stats = rules.summary_stats_to_json.output
+    output:
+        "{date}/consensus_genomes/{reference}/{sample}.payload.json"
+    shell:
+        """
+        python scripts/create_id3c_payload.py \
+            --masked-consensus {input.masked_consensus} \
+            --summary-stats {input.summary_stats} \
+            --metadata {input.metadata} > {output}
+        """
+
+rule post_masked_consensus_and_summary_stats_to_id3c:
+    input:
+        rules.create_id3c_payload.output
+    output:
+        successful_post = "{date}/consensus_genomes/{reference}/{sample}.successful-post.log"
+    params:
+        id3c_url = os.environ['ID3C_URL'],
+        id3c_username = os.environ['ID3C_USERNAME'],
+        id3c_password = os.environ['ID3C_PASSWORD'],
+        id3c_slack_webhook = os.environ['SLACK_WEBHOOK_URL'],
+    log: "{date}/consensus_genomes/{reference}/{sample}.http-response.log"
+    run:
+        headers = {'Content-type': 'application/json'}
+        file = open(str(log), "w")
+
+        with open(str(input)) as f:
+            data = f.read()
+
+        try:
+            response = requests.post(
+                urljoin(params.id3c_url, 'v1/receiving/consensus-genome'),
+                data=data,
+                headers=headers,
+                auth=(params.id3c_username, params.id3c_password))
+
+            response.raise_for_status()
+
+            if response.ok:
+                with open(str(output), "w"):
+                    pass
+
+        except HTTPError as http_err:
+            file.write(str(http_err))
+
+            slack_data = { "text":
+                f":rotating_light: Hey {getpass.getuser()}: Assembly failed to upload to ID3C with HTTP status code: " +
+                f"{http_err.response.status_code}.\nMore details at `{log}`"
+            }
+
+            try:
+                slack_response = requests.post(params.id3c_slack_webhook,
+                    data=json.dumps(slack_data), headers=headers)
+
+                slack_response.raise_for_status()
+
+            except HTTPError as slack_http_err:
+                file.write(str(slack_http_err))
+
+            raise http_err
+
+        except Exception as err:
+            file.write(str(err))
+
+            raise Exception(f"Error: {err} in ID3C POST request.")
+
+        finally:
+            file.close()
+
+rule aggregate:
+    input:
+        aggregate_input = aggregate_input
+    output:
+        aggregate_summary = "{date}/summary/aggregate/{reference}/{sample}.log"
+    shell:
+        """
+        echo 'Final output: {input.aggregate_input}' > {output}
+        """
+
+rule clean:
+    message: "Removing directories: {params}"
+    params:
+        "*/summary "
+        "*/process "
+        "*/benchmarks "
+        "references/*.bt2 "
+        "references/*.fai"
+    shell:
+        """
+        rm -rfv {params}
+        """

@@ -514,3 +514,14 @@ rule clean:
         """
         rm -rfv {params}
         """
+
+onerror:
+    print("An error occurred, sending Slack message.")
+    shell(
+        """
+        curl -X POST -H 'Content-type: application/json' \
+                --data '{{"text": \
+                ":rotating_light: An error occurred in an assembly job.\nMore details at `{log}`"}}' \
+                {config[id3c-alerts-slack-webhook]}
+        """
+    )

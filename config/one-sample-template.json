@@ -1,0 +1,39 @@
+{
+    "fastq_files" : [],
+    "sample": "",
+    "references": [],
+    "barcode_match" :
+      "test_data/key_value.txt",
+    "min_align_rate":
+      1.00,
+    "id3c-consensus-genome-post-url": "http://localhost:5000/v1/receiving/consensus-genome",
+    "id3c-username-and-password": "test:123",
+    "id3c-alerts-slack-webhook": "ID3C-ALERTS-SLACK-WEBHOOK-URL",
+    "params" :
+      {
+        "trimmomatic" :
+          {
+            "paired_end" : "PE",
+            "adapters" : "illumina-adapters.fasta",
+            "illumina_clip" : "1:30:10",
+            "window_size" : "5",
+            "trim_qscore" : "30",
+            "minimum_length" : "50"
+          },
+        "bowtie2" :
+          {
+            "threads" : "4",
+            "all" : "-a"
+          },
+        "mpileup" :
+          {
+            "depth" : "1000000"
+          },
+        "varscan" :
+          {
+            "min_cov" : "20",
+            "snp_qual_threshold" : "30",
+            "snp_frequency" : "0.50"
+          }
+      }
+}

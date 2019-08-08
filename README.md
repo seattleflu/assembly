@@ -154,10 +154,14 @@ Sort the BAM file into "genome order" using [samtools sort](http://www.htslib.or
 ### 7. Bamstats
 Generates statistics for coverage using [BAMStats](http://bamstats.sourceforge.net/).
 
-### 8. Align rate checkpoint
+### 8. Mapped reads checkpoint
 [Checkpoints](https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#data-dependent-conditional-execution) allow for data-dependent conditional execution, forcing Snakemake to re-evaluate the DAG at this point.
 
-Checks the alignment summary produced by the bowtie2 mapping. If the overall align rate is higher than the `min_align_rate` specified in the config, then continue with process to build consensus genome. If not, then stop the process for this sample/reference pair.
+Calculates the minimum number of reads required to meet the minimum coverage depth set for `varscan mpileup2snp` and checks the number of mapped reads from the bowtie2 alignment summary. The minimum number of reads required is calculated as:
+```
+min_reads = (reference_genome_length * min_cov) / (raw_read_length)
+```
+If `mapped_reads` is greater than or equal to `min_reads`, then continue with process to build consensus genome. If not, then stop the process for this sample/reference pair.
 
 ### 9. Not mapped
 This rule is necessary for the checkpoint above to work, because it must send the data down one of two paths. This is the "dead end" where a consensus genome is __not__ generated.

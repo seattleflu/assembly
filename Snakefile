@@ -93,8 +93,11 @@ def aggregate_input(wildcards):
     Returns input for rule aggregate based on output from checkpoint align_rate.
     Set minimum align rate in config under "min_align_rate".
     """
-    with open(checkpoints.align_rate.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
-        if float(f.read().strip()[:3]) < config["min_align_rate"]:
+    with open(checkpoints.mapped_reads.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
+        summary = f.readlines()
+        min_reads = float(summary[0].split()[-1])
+        mapped = float(summary[1].split()[-1])
+        if mapped <= min_reads:
             return "summary/not_mapped/{reference}/{sample}.txt"
         else:
             return "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
@@ -296,33 +299,40 @@ rule bamstats:
 #             M={params.picard_params}
 #         """
 
-checkpoint align_rate:
+checkpoint mapped_reads:
     input:
-        bt2_log = rules.map.output.bt2_log
+        bt2_log = rules.map.output.bt2_log,
+        reference = "references/{reference}.fasta"
     output:
-        temp("summary/align_rate/{reference}/{sample}.txt")
+        "summary/checkpoint/{reference}/{sample}.txt"
+    params:
+        min_cov = config["params"]["varscan"]["min_cov"],
+        raw_read_length = config["raw_read_length"]
     shell:
         """
-        tail -n 1 {input}  > {output}
+        python scripts/checkpoint_mapped_reads.py \
+            --bowtie2 {input.bt2_log} \
+            --min-cov {params.min_cov} \
+            --raw-read-length {params.raw_read_length} \
+            --reference {input.reference} \
+            --output {output} \
         """
 
 rule not_mapped:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta",
-        temp = "summary/align_rate/{reference}/{sample}.txt"
+        reference = "references/{reference}.fasta"
     output:
         not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
     shell:
         """
-        cat {input.temp} > {output.not_mapped}
+        touch {output.not_mapped}
         """
 
 rule pileup:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta",
-        temp = "summary/align_rate/{reference}/{sample}.txt"
+        reference = "references/{reference}.fasta"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:

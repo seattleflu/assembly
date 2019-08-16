@@ -188,12 +188,9 @@ if __name__ == "__main__":
         help="The maximum difference acceptable between R1 and R2 reads")
 
 
-    try:
-        args = parser.parse_args()
-        edit_config_file(args.directory, args.config_file,
-                         args.sample_target_map,
-                         args.sample, args.target,
-                         args.max_difference)
-    except:
-        parser.print_help()
-        sys.exit(0)
+
+    args = parser.parse_args()
+    edit_config_file(args.directory, args.config_file,
+                        args.sample_target_map,
+                        args.sample, args.target,
+                        args.max_difference)

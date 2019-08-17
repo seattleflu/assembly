@@ -46,6 +46,7 @@ https://github.com/lmoncla/illumina_pipeline
 import sys, os
 import json
 import glob
+import getpass
 import requests
 from requests.exceptions import HTTPError
 from urllib.parse import urljoin
@@ -540,6 +541,7 @@ rule post_masked_consensus_and_summary_stats_to_id3c:
         id3c_url = os.environ['ID3C_URL'],
         id3c_username = os.environ['ID3C_USERNAME'],
         id3c_password = os.environ['ID3C_PASSWORD'],
+        id3c_slack_webhook = os.environ['SLACK_WEBHOOK_URL'],
     log: "consensus_genomes/{reference}/{sample}.http-response.log"
     run:
         headers = {'Content-type': 'application/json'}
@@ -559,6 +561,22 @@ rule post_masked_consensus_and_summary_stats_to_id3c:
 
         except HTTPError as http_err:
             file.write(str(http_err))
+
+            slack_data = { "text":
+                f":rotating_light: Hey {getpass.getuser()}: Assembly failed to upload to ID3C with HTTP status code: " +
+                f"{http_err.response.status_code}.\nMore details at `{log}`"
+            }
+
+            try:
+                slack_response = requests.post(params.id3c_slack_webhook,
+                    data=json.dumps(slack_data), headers=headers)
+
+                slack_response.raise_for_status()
+
+            except HTTPError as slack_http_err:
+                file.write(str(slack_http_err))
+
+                raise slack_http_err from None
 
         except Exception as err:
             file.write(str(err))

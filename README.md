@@ -219,7 +219,14 @@ Consensus genomes can be uploaded to [id3c] with the correct id3c permissions st
 variables. Note: id3c uses basic authentication. More information can be found in the [id3c
 documentation].
 
+#### Send Slack alerts on failed uploads
+An assembly can utilize the ID3C Bot Slack application to send notifications when an id3c upload
+fails. The Slack webhook for the #id3c-alerts Slack channel should be stored as an environment
+variable. Slack webhook URLs are found at the [Slack Apps API site]. Make sure you're logged into
+the Seattle Flu Study workspace. If you cannot view the link above, contact another member of the
+id3c-team to add you as a collaborator to the ID3C Bot app.
 
 
 [id3c]: http://github.com/seattleflu/id3c
 [id3c documentation]: https://github.com/seattleflu/id3c/blob/master/README.md
+[Slack Apps API site]: https://api.slack.com/apps/ALR131CG0/incoming-webhooks?

@@ -29,6 +29,9 @@ def find_fasta_urls(fastq_directory, filename_pattern, url_prefix) -> dict:
     filename_pattern = re.compile(filename_pattern)
 
     for filepath in list(Path(fastq_directory).glob("*.fastq.gz")):
+        # Skip the Undetermined FASTQ files
+        if filepath.name.startswith("Undetermined"):
+            continue
         filename = filepath.name
         # Check the filename matches provided filename pattern
         filename_match = filename_pattern.match(filename)

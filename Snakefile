@@ -471,7 +471,7 @@ rule fasta_headers:
             -k {input.key_value_file} --keep-key \
             temp_{wildcards.sample}.fasta > {output.masked_consensus}
         awk '{{split(substr($0,2),a,"|"); \
-            if(a[2]) print ">"a[1]"|"a[1]"-"a[3]"|"a[2]"|"a[3]; \
+            if(a[2]) print ">"a[1]"|"a[1]"-"a[2]"-"a[3]"|"a[2]"|"a[3]; \
             else print; }}' \
             {output.masked_consensus} > temp_{wildcards.sample}.fasta
         mv temp_{wildcards.sample}.fasta {output.masked_consensus}

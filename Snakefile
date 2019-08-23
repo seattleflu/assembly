@@ -93,8 +93,11 @@ def aggregate_input(wildcards):
     Returns input for rule aggregate based on output from checkpoint align_rate.
     Set minimum align rate in config under "min_align_rate".
     """
-    with open(checkpoints.align_rate.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
-        if float(f.read().strip()[:3]) < config["min_align_rate"]:
+    with open(checkpoints.mapped_reads.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
+        summary = f.readlines()
+        min_reads = float(summary[0].split()[-1])
+        mapped = float(summary[1].split()[-1])
+        if mapped <= min_reads:
             return "summary/not_mapped/{reference}/{sample}.txt"
         else:
             return "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
@@ -296,44 +299,53 @@ rule bamstats:
 #             M={params.picard_params}
 #         """
 
-checkpoint align_rate:
+checkpoint mapped_reads:
     input:
-        bt2_log = rules.map.output.bt2_log
+        bt2_log = rules.map.output.bt2_log,
+        reference = "references/{reference}.fasta"
     output:
-        temp("summary/align_rate/{reference}/{sample}.txt")
+        "summary/checkpoint/{reference}/{sample}.txt"
+    params:
+        min_cov = config["params"]["varscan"]["min_cov"],
+        raw_read_length = config["raw_read_length"]
     shell:
         """
-        tail -n 1 {input}  > {output}
+        python scripts/checkpoint_mapped_reads.py \
+            --bowtie2 {input.bt2_log} \
+            --min-cov {params.min_cov} \
+            --raw-read-length {params.raw_read_length} \
+            --reference {input.reference} \
+            --output {output} \
         """
 
 rule not_mapped:
-    input: 
+    input:
         sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta",
-        temp = "summary/align_rate/{reference}/{sample}.txt"
+        reference = "references/{reference}.fasta"
     output:
         not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
     shell:
         """
-        cat {input.temp} > {output.not_mapped}
+        touch {output.not_mapped}
         """
 
 rule pileup:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta",
-        temp = "summary/align_rate/{reference}/{sample}.txt"
+        reference = "references/{reference}.fasta"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:
-        depth = config["params"]["mpileup"]["depth"]
+        depth = config["params"]["mpileup"]["depth"],
+        min_base_qual = config["params"]["varscan"]["snp_qual_threshold"]
     benchmark:
         "benchmarks/{sample}_{reference}.mpileup"
     # group:
     #     "post-mapping"
     shell:
         """
-        samtools mpileup -A \
+        samtools mpileup -a -A \
+            -Q {params.min_base_qual} \
             -d {params.depth} \
             {input.sorted_bam} > {output.pileup} \
             -f {input.reference}
@@ -397,33 +409,27 @@ rule vcf_to_consensus:
             {output.consensus_genome}
         """
 
-rule coverage_summary:
+rule create_bed_file:
     input:
-        sorted_bam = rules.sort.output.sorted_bam_file
+        pileup = rules.pileup.output.pileup
     output:
-        coverage = "summary/coverage/{reference}/{sample}.bed"
-    shell:
-        """
-        bedtools genomecov -ibam {input.sorted_bam} -bga > {output.coverage}
-        """
-
-rule low_coverage:
-    input:
-        coverage_summary = rules.coverage_summary.output.coverage
-    output:
-        low_coverage = "summary/low_coverage/{reference}/{sample}.bed"
+        bed_file = "summary/low_coverage/{reference}/{sample}.bed"
     params:
-        min_cov = config["params"]["varscan"]["min_cov"]
+        min_cov = config["params"]["varscan"]["min_cov"],
+        min_freq = config["params"]["varscan"]["snp_frequency"]
     shell:
         """
-        awk "\$4 < {params.min_cov} {{print \$0}}" \
-            {input.coverage_summary} > {output.low_coverage}
+        python scripts/create_bed_file_for_masking.py \
+            --pileup {input.pileup} \
+            --min-cov {params.min_cov} \
+            --min-freq {params.min_freq} \
+            --bed-file {output.bed_file}
         """
 
 rule mask_consensus:
     input:
         consensus_genome = rules.vcf_to_consensus.output.consensus_genome,
-        low_coverage = rules.low_coverage.output.low_coverage
+        low_coverage = rules.create_bed_file.output.bed_file
     output:
         masked_consensus = temp("consensus_genomes/{reference}/{sample}.temp_consensus.fasta")
     shell:
@@ -465,7 +471,7 @@ rule fasta_headers:
             -k {input.key_value_file} --keep-key \
             temp_{wildcards.sample}.fasta > {output.masked_consensus}
         awk '{{split(substr($0,2),a,"|"); \
-            if(a[2]) print ">"a[1]"|"a[1]"-"a[3]"|"a[2]"|"a[3]; \
+            if(a[2]) print ">"a[1]"|"a[1]"-"a[2]"-"a[3]"|"a[2]"|"a[3]; \
             else print; }}' \
             {output.masked_consensus} > temp_{wildcards.sample}.fasta
         mv temp_{wildcards.sample}.fasta {output.masked_consensus}
@@ -479,13 +485,13 @@ rule combined_fasta:
         """
         touch {output.combined_fasta}
         """
-    
+
 rule aggregate:
     input:
         aggregate_input = aggregate_input
     output:
         aggregate_summary = "summary/aggregate/{reference}/{sample}.log"
-    params: 
+    params:
         combined_fasta = rules.combined_fasta.output
     run:
         if input.aggregate_input.split(".")[-1] == "fasta":
@@ -494,7 +500,7 @@ rule aggregate:
 
 rule clean:
     message: "Removing directories: {params}"
-    params: 
+    params:
         "summary "
         "process "
         "benchmarks "

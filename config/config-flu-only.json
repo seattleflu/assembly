@@ -72,10 +72,9 @@
         "mapper_filepath": "~/Downloads/sample-target-match.xlsx",
         "nwgc_column": "sample",
         "sfs_column": "uuid",
-        "key_value_filepath": "test_data/key_value.txt"  
+        "key_value_filepath": "test_data/key_value.txt"
     },
-    "min_align_rate": 
-      1.00,
+    "raw_read_length": 150,
     "reference_viruses" :
       {
         "h1n1pdm_Michigan_45_2015" : {},
@@ -111,4 +110,3 @@
           }
       }
 }
-  

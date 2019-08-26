@@ -99,10 +99,12 @@ def aggregate_input(wildcards):
     Set minimum align rate in config under "min_align_rate".
     """
     with open(checkpoints.mapped_reads.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
-        summary = f.readlines()
-        min_reads = float(summary[0].split()[-1])
-        mapped = float(summary[1].split()[-1])
-        if mapped <= min_reads:
+        summary = json.load(f)
+        all_segments_aligned = summary["all_segments_aligned"]
+        min_reads = summary["minimum_reads_required"]
+        mapped = summary["mapped_reads"]
+
+        if not all_segments_aligned or mapped <= min_reads:
             return "summary/not_mapped/{reference}/{sample}.txt"
         else:
             return "consensus_genomes/{reference}/{sample}.http-response.log"
@@ -307,15 +309,17 @@ rule bamstats:
 checkpoint mapped_reads:
     input:
         bt2_log = rules.map.output.bt2_log,
+        bamstats = rules.bamstats.output.bamstats_file,
         reference = "references/{reference}.fasta"
     output:
-        "summary/checkpoint/{reference}/{sample}.txt"
+        "summary/checkpoint/{reference}/{sample}.json"
     params:
         min_cov = config["params"]["varscan"]["min_cov"],
         raw_read_length = config["raw_read_length"]
     shell:
         """
         python scripts/checkpoint_mapped_reads.py \
+            --bamstats {input.bamstats} \
             --bowtie2 {input.bt2_log} \
             --min-cov {params.min_cov} \
             --raw-read-length {params.raw_read_length} \

@@ -22,10 +22,14 @@ def determine_if_all_segments_aligned(bamstats, reference) -> bool:
 
     bamstats_segments = set()
     with open(bamstats, "r") as f:
-        # skip header line
-        next(f)
-        for line in f:
-            bamstats_segments.add(line.split()[0])
+        # try to skip header line
+        try:
+            next(f)
+        except StopIteration as err:
+            print("No coverage statistics found in BAMStats log.")
+        else:
+            for line in f:
+                bamstats_segments.add(line.split()[0])
 
     return ref_segments == bamstats_segments
 

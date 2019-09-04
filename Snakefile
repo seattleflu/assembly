@@ -576,7 +576,7 @@ rule post_masked_consensus_and_summary_stats_to_id3c:
             except HTTPError as slack_http_err:
                 file.write(str(slack_http_err))
 
-                raise slack_http_err from None
+            raise http_err
 
         except Exception as err:
             file.write(str(err))

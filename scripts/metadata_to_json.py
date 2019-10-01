@@ -5,11 +5,12 @@ file.
 """
 import json
 import argparse
+from urllib.parse import urljoin
 
-def metadata_to_json(urls):
+def metadata_to_json(urls, url_prefix):
     print(json.dumps( {
         "metadata": {
-            "urls": list(set(urls))
+            "urls": list(set(urljoin(url_prefix, url) for url in urls))
         }
     }, indent=4))
 
@@ -20,6 +21,9 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("urls", type=str, nargs="+", metavar = "<urls>")
+    parser.add_argument("--url-prefix",
+        default = "file://rhino.fhcrc.org",
+        help = "Base for fully-qualifying sequence read set URLs")
 
     args = parser.parse_args()
-    metadata_to_json(args.urls)
+    metadata_to_json(args.urls, args.url_prefix)

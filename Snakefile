@@ -556,7 +556,7 @@ rule post_masked_consensus_and_summary_stats_to_id3c:
 
         try:
             response = requests.post(
-                urljoin(params.id3c_url, '/v1/receiving/consensus-genome'),
+                urljoin(params.id3c_url, 'v1/receiving/consensus-genome'),
                 data=data,
                 headers=headers,
                 auth=(params.id3c_username, params.id3c_password))

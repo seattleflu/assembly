@@ -105,9 +105,9 @@ def aggregate_input(wildcards):
         mapped = summary["mapped_reads"]
 
         if not all_segments_aligned or mapped <= min_reads:
-            return "summary/not_mapped/{reference}/{sample}.txt"
+            return rules.not_mapped.output.not_mapped
         else:
-            return "consensus_genomes/{reference}/{sample}.http-response.log"
+            return rules.post_masked_consensus_and_summary_stats_to_id3c.output.successful_post
 
 # Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
@@ -541,6 +541,8 @@ rule create_id3c_payload:
 rule post_masked_consensus_and_summary_stats_to_id3c:
     input:
         rules.create_id3c_payload.output
+    output:
+        successful_post = "consensus_genomes/{reference}/{sample}.successful-post.log"
     params:
         id3c_url = os.environ['ID3C_URL'],
         id3c_username = os.environ['ID3C_USERNAME'],
@@ -562,6 +564,10 @@ rule post_masked_consensus_and_summary_stats_to_id3c:
                 auth=(params.id3c_username, params.id3c_password))
 
             response.raise_for_status()
+
+            if response.ok:
+                with open(str(output), "w"):
+                    pass
 
         except HTTPError as http_err:
             file.write(str(http_err))

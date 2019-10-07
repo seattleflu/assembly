@@ -100,7 +100,7 @@ def aggregate_input(wildcards):
         mapped = summary["mapped_reads"]
 
         if not all_segments_aligned or mapped <= min_reads:
-            return rules.not_mapped.output.not_mapped
+            return rules.post_not_mapped_to_id3c.output.successful_post
         else:
             return rules.post_masked_consensus_and_summary_stats_to_id3c.output.successful_post
 
@@ -324,13 +324,31 @@ checkpoint mapped_reads:
 
 rule not_mapped:
     input:
-        sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta"
+        reference = "references/{reference}.fasta",
+        metadata = "consensus_genomes/{reference}/{sample}.metadata.json",
+        nwgc_sfs_map = config["barcode_match"]["key_value_filepath"]
     output:
-        not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
+        not_mapped = "summary/not_mapped/{reference}/{sample}.json"
     shell:
         """
-        touch {output.not_mapped}
+        python scripts/create_not_mapped_payload.py \
+            --metadata {input.metadata} \
+            --reference {wildcards.reference} \
+            --nwgc-sfs-map {input.nwgc_sfs_map} > {output.not_mapped}
+        """
+
+rule post_not_mapped_to_id3c:
+    input:
+        rules.not_mapped.output.not_mapped
+    output:
+        successful_post = "summary/not_mapped/{reference}/{sample}.successful_post.log"
+    log: "summary/not_mapped/{reference}/{sample}.http-response.log"
+    shell:
+        """
+        python scripts/post_to_id3c.py \
+            --payload {input} \
+            --output {output} \
+            --http-response {log}
         """
 
 rule pileup:

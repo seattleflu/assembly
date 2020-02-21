@@ -167,7 +167,7 @@ def find_read_ids(fastq_file: str) -> set:
     read_ids = set()
     with gzip.open(fastq_file, "rt") as r1_file:
         for line in r1_file:
-            if line.startswith("@"):
+            if line.startswith("@") and ' ' in line:
                 id = line.split()[0]
                 read_ids.add(id)
     return read_ids

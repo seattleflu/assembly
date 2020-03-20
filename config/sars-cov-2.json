@@ -1,0 +1,34 @@
+{
+    "fastq_directory": "testdata",
+    "ignored_samples": {
+        "Undetermined": {}
+    },
+    "sample_reference_pairs": {
+    },
+    "raw_read_length": 150,
+    "reference_viruses": {
+        "sars-cov-2": {}
+    },
+    "params": {
+        "trimmomatic": {
+            "paired_end": "PE",
+            "adapters": "illumina-adapters.fasta",
+            "illumina_clip": "1:30:10",
+            "window_size": "5",
+            "trim_qscore": "30",
+            "minimum_length": "50"
+        },
+        "bowtie2": {
+            "threads": "4",
+            "all": "-a"
+        },
+        "mpileup": {
+            "depth": "1000000"
+        },
+        "varscan": {
+            "min_cov": "20",
+            "snp_qual_threshold": "30",
+            "snp_frequency": "0.50"
+        }
+    }
+}

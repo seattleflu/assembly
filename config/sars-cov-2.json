@@ -26,7 +26,7 @@
             "depth": "1000000"
         },
         "varscan": {
-            "min_cov": "20",
+            "min_cov": "25",
             "snp_qual_threshold": "30",
             "snp_frequency": "0.50"
         }

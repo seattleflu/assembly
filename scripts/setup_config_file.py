@@ -131,11 +131,11 @@ def sample_reads_pair(file_dir: str,
             continue
         print(f"Lane: {i}")
         try:
-+            r1 = glob.glob(file_dir + f"/{sample}*L00{i}*R1*.fastq.gz")[0]
-+            r2 = glob.glob(file_dir + f"/{sample}*L00{i}*R2*.fastq.gz")[0]
-+        except IndexError:
-+            print("Skipping lane due to missing fastq.gz files")
-+            continue
+            r1 = glob.glob(file_dir + f"/{sample}*L00{i}*R1*.fastq.gz")[0]
+            r2 = glob.glob(file_dir + f"/{sample}*L00{i}*R2*.fastq.gz")[0]
+        except IndexError:
+            print("Skipping lane due to missing fastq.gz files")
+            continue
         difference = check_r1_r2_reads(r1, r2)
         if difference > max_diff:
             return False

@@ -61,19 +61,19 @@ def generate_sample_ids(cfg):
     all_ids = set()
     for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
         if f.endswith('.fastq.gz'):
-            f = f.split('.')[0].split('/')[-1].split('_')[0]
+            f = f.split('.')[0].split('/')[-1][:-3]
             if f in cfg['ignored_samples']:
                 continue
             all_ids.add(f)
     return all_ids
 
-def generate_all_files(sample, config):
-    """For a given sample, determine all fastqs as a tuple of forward
-    and reverse
-    """
-    r1 = glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample))
-    r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
-    return (r1, r2)
+#def generate_all_files(sample, config):
+#    """For a given sample, determine all fastqs as a tuple of forward
+#    and reverse
+#    """
+#    r1 = glob.glob('{}*R1*'.format(config['fastq_directory'], sample))
+#    r2 = glob.glob('{}*R2*'.format(config['fastq_directory'], sample))
+#    return (r1, r2)
 
 def filter_combinator(combinator, config):
     """ Custom combinatoric function to be used with expand function.
@@ -112,7 +112,7 @@ def aggregate_input(wildcards):
 # Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
 all_ids = generate_sample_ids(config)
-mapped = {id: generate_all_files(id, config) for id in all_ids}
+#mapped = {id: generate_all_files(id, config) for id in all_ids}
 filtered_product = filter_combinator(product, config)
 
 #### Main pipeline
@@ -143,20 +143,20 @@ rule index_reference_genome:
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
         """
 
-rule merge_lanes:
-    input:
-        all_r1 = lambda wildcards: mapped[wildcards.sample][0],
-        all_r2 = lambda wildcards: mapped[wildcards.sample][1]
-    output:
-        merged_r1 = "process/merged/{sample}_R1.fastq.gz",
-        merged_r2 = "process/merged/{sample}_R2.fastq.gz"
-    # group:
-    #     "pre-mapping"
-    shell:
-        """
-        cat {input.all_r1} >> {output.merged_r1}
-        cat {input.all_r2} >> {output.merged_r2}
-        """
+#rule merge_lanes:
+#    input:
+#        all_r1 = lambda wildcards: mapped[wildcards.sample][0],
+#        all_r2 = lambda wildcards: mapped[wildcards.sample][1]
+#    output:
+#        merged_r1 = "process/merged/{sample}_R1.fastq.gz",
+#        merged_r2 = "process/merged/{sample}_R2.fastq.gz"
+#    # group:
+#    #     "pre-mapping"
+#    shell:
+#        """
+#        cat {input.all_r1} >> {output.merged_r1}
+#        cat {input.all_r2} >> {output.merged_r2}
+#        """
 # Ignored for the time being
 # rule pre_trim_fastqc:
 #     input:
@@ -171,8 +171,8 @@ rule merge_lanes:
 
 rule trim_fastqs:
     input:
-        fastq_f = "process/merged/{sample}_R1.fastq.gz",
-        fastq_r = "process/merged/{sample}_R2.fastq.gz"
+        fastq_f = config['fastq_directory'] + "{sample}_R1.fastq.gz",
+        fastq_r = config['fastq_directory'] + "{sample}_R2.fastq.gz"
     output:
         trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq",
         trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq",
@@ -324,7 +324,7 @@ checkpoint mapped_reads:
             --min-cov {params.min_cov} \
             --raw-read-length {params.raw_read_length} \
             --reference {input.reference} \
-            --output {output} \
+            --output {output} 
         """
 
 rule not_mapped:

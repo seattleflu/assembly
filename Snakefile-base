@@ -276,7 +276,6 @@ rule call_snps:
             --min-coverage {params.min_cov} \
             --min-avg-qual {params.snp_qual_threshold} \
             --min-var-freq {params.snp_frequency} \
-            --strand-filter 1 \
             --output-vcf 1 > {output.vcf}
         """
 

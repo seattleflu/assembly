@@ -1,34 +1,6 @@
-"""Snakefile
-
+"""
 Processes input fastq files to create consensus genomes and their associated
 summary statistics for the Seattle Flu Study.
-
-Install and activate the appropriate environment for the pipeline using
-Conda (https://conda.io/en/latest/):
-    $ conda env create -f envs/seattle-flu-environment.yaml
-    $ conda activate seattle-flu
-
-Before running perform a dry-run to test that all input files are correctly
-located and that the Snakemake DAG builds correctly:
-    $ snakemake -n
-
-To run on a local machine:
-    $ snakemake -k
-
-To run on the Fred Hutch cluster (Rhino):
-    $ snakemake \
-        -w 60 \
-        --cluster-config config/cluster.json \
-        --cluster "sbatch \
-            --nodes=1 \
-            --tasks=1 \
-            --mem={cluster.memory} \
-            --cpus-per-task={cluster.cores} \
-            --tmp={cluster.disk} \
-            --time={cluster.time} \
-            -o all_output.out" \
-        -j 20 \
-        -k
 
 Basic steps:
     1. Trim raw fastq's with Trimmomatic
@@ -48,31 +20,40 @@ from datetime import datetime
 from itertools import product
 
 #### Helper functions and variable def'ns
-def generate_sample_ids(cfg):
-    """Return all the sample names (i.e. S04) as a list.
-    Will ignore all samples listed under "ignored_samples" of config.
+def generate_sample_ids(config: dict) -> set:
+    """
+    Find all fastz.gz files within the fastq_directory in the *config* and
+    parse the sample ids from these files to return as a set.
+
+    Expects the file names to have the format of <sample_id>_*.fastq.gz
+    Will ignore all sample ids listed under "ignored_samples" of *config*
     """
     all_ids = set()
-    for f in glob.glob("{}/*".format(cfg['fastq_directory'])):
-        if f.endswith('.fastq.gz'):
-            f = f.split('.')[0].split('/')[-1].split('_')[0]
-            if f in cfg['ignored_samples']:
+    for filename in glob.glob("{}/*".format(config['fastq_directory'])):
+        if filename.endswith('.fastq.gz'):
+            sample_id = filename.split('.')[0].split('/')[-1].split('_')[0]
+            if sample_id in config['ignored_samples']:
                 continue
-            all_ids.add(f)
+            all_ids.add(sample_id)
     return all_ids
 
-def generate_all_files(sample, config):
-    """For a given sample, determine all fastqs as a tuple of forward
-    and reverse
+def generate_all_files(sample: str, config: dict) -> tuple:
+    """
+    For a given sample, determine all fastqs as a tuple of forward
+    and reverse within the fastq_directory in the *config*.
+
+    The fastqs are expected to have *sample* in the filenamane and
+    R1/R2 in the filename to differentiate forward and reverse reads.
     """
     r1 = glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample))
     r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
     return (r1, r2)
 
 def filter_combinator(combinator, config):
-    """ Custom combinatoric function to be used with expand function.
+    """
+    Custom combinatoric function to be used with :py:func:`snakemake.io.expand`
     Only generates combination of sample and reference wildcards that are
-    listed under "sample_reference_pairs" of config file.
+    listed under `sample_reference_pairs` of the *config*.
     If no references are listed for a sample, will generate all possible
     combinations with all references.
     """
@@ -99,8 +80,6 @@ rule index_reference_genome:
         raw_reference = "references/{reference}.fasta"
     output:
         indexed_reference = "references/{reference}.1.bt2"
-    # group:
-    #     "pre-mapping"
     shell:
         """
         bowtie2-build {input.raw_reference} references/{wildcards.reference}
@@ -113,24 +92,11 @@ rule merge_lanes:
     output:
         merged_r1 = "process/merged/{sample}_R1.fastq.gz",
         merged_r2 = "process/merged/{sample}_R2.fastq.gz"
-    # group:
-    #     "pre-mapping"
     shell:
         """
         cat {input.all_r1} >> {output.merged_r1}
         cat {input.all_r2} >> {output.merged_r2}
         """
-# Ignored for the time being
-# rule pre_trim_fastqc:
-#     input:
-#         all_fastq = lambda wildcards: mapped[wildcards.sample][0]+mapped[wildcards.sample][1]
-#     output:
-#         qc = "summary/pre_trim_fastqc/{sample}_fastqc.html",
-#         zip = "summary/pre_trim_fastqc/{sample}_fastqc.zip"
-#     shell:
-#         """
-#         fastqc {input.all_fastq} -o summary/pre_trim_fastqc
-#         """
 
 rule trim_fastqs:
     input:
@@ -150,8 +116,6 @@ rule trim_fastqs:
         minimum_length = config["params"]["trimmomatic"]["minimum_length"]
     benchmark:
         "benchmarks/{sample}.trimmo"
-    # group:
-    #     "trim-and-map"
     shell:
         """
         trimmomatic \
@@ -179,8 +143,6 @@ rule post_trim_fastqc:
         qc_2p_zip = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
         qc_1u_zip = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
         qc_2u_zip = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
-    # group:
-    #     "summary-statistics"
     shell:
         """
         fastqc {input.p1} -o summary/post_trim_fastqc
@@ -204,8 +166,6 @@ rule map:
         map_all = config["params"]["bowtie2"]["all"]
     benchmark:
         "benchmarks/{sample}_{reference}.bowtie2"
-    # group:
-    #     "trim-and-map"
     shell:
         """
         bowtie2 \
@@ -226,8 +186,6 @@ rule sort:
         sorted_bam_file = "process/sorted/{reference}/{sample}.sorted.bam"
     benchmark:
         "benchmarks/{sample}_{reference}.sort"
-    # group:
-    #     "post-mapping"
     shell:
         """
         samtools view \
@@ -243,31 +201,10 @@ rule bamstats:
         bamstats_file = "summary/bamstats/{reference}/{sample}.coverage_stats.txt"
     benchmark:
         "benchmarks/{sample}_{reference}.bamstats"
-    # group:
-    #     "summary-statistics"
     shell:
         """
         BAMStats -i {input.sorted_bam} > {output.bamstats_file}
         """
-
-# Removed Picard because it was too computationally intensive.
-# Uncomment and fix inputs of pileup to re-add
-# rule remove_duplicate_reads:
-#     input:
-#         sorted_bam = rules.sort.output.sorted_bam_file
-#     output:
-#         deduped = "process/deduped/{reference}/{sample}.nodups.sam"
-#     params:
-#         picard_params = "summary/file.params.txt"
-#     shell:
-#         """
-#         picard \
-#             MarkDuplicates \
-#             I={input.sorted_bam} \
-#             O={output.deduped} \
-#             REMOVE_DUPLICATES=true \
-#             M={params.picard_params}
-#         """
 
 checkpoint mapped_reads:
     input:
@@ -312,8 +249,6 @@ rule pileup:
         min_base_qual = config["params"]["varscan"]["snp_qual_threshold"]
     benchmark:
         "benchmarks/{sample}_{reference}.mpileup"
-    # group:
-    #     "post-mapping"
     shell:
         """
         samtools mpileup -a -A \
@@ -412,7 +347,6 @@ rule mask_consensus:
             -fo {output.masked_consensus}
         """
 
-
 rule combined_fasta:
     output:
         combined_fasta = "consensus_genomes/batch-{current_datetime}.fasta"
@@ -421,7 +355,6 @@ rule combined_fasta:
         """
         touch {output.combined_fasta}
         """
-
 
 rule clean:
     message: "Removing directories: {params}"

@@ -18,3 +18,8 @@ references/*.fai
 __pycache__
 .ipynb_checkpoints
 .DS_Store
+core
+
+# Stored files on rhino
+Batch*/
+config/*_config.json

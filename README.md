@@ -190,7 +190,7 @@ Creates index for compressed VCF using [bcftools index](https://samtools.github.
 Create consensus genome by applying VCF variants to the reference genome using [bcftools consensus](https://samtools.github.io/bcftools/bcftools.html#consensus). This does not account for coverage, so it will just fill in blanks with the base from the reference genome.
 
 ### 15. Create bed file
-Creates a BED file for positions that need to be masked in the consensus genome. Positions need to be masked if they are below the minimum coverage depth and if they are disproportionally supported by one strand (>90%).
+Creates a BED file for positions that need to be masked in the consensus genome. Positions need to be masked if they are below the minimum coverage depth.
 
 ### 16. Mask consensus
 Masks the consensus genome with "N" at bases where coverage is below the `min_cov` parameter using [bedtools maskfasta](https://bedtools.readthedocs.io/en/latest/content/tools/maskfasta.html).

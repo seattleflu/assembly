@@ -202,10 +202,14 @@ Example FASTA header: `>SFS-UUID|SFS-UUID-PB2|H1N1pdm|PB2`
 2. Uses [seqkit replace](https://bioinf.shenwei.me/seqkit/usage/#replace) to replace the NWGC sample ID with the SFS UUID.
 3.  Create the UUID-gene combination using AWK
 
-### 18. Combined FASTA
+### 18. Percent identity checkpoint
+For Flu B references (Vic & Yam), check the percent identity of the HA segement of the consensus genome. If it is less
+than 95%, then do not upload the consensus genome to ID3C.
+
+### 19. Combined FASTA
 Creates the final combined FASTA file that will have all the consensus genomes generated in a day.
 
-### 19. Aggregate
+### 20. Aggregate
 This is the last rule of the pipeline that prints out the final result of each sample/reference pair. If a consensus genome is generated, then this will also add it to the final combined FASTA.
 
 The input of this rule differs based on the result of the checkpoint, so this rule dictates the final outcome of each sample/reference pair.

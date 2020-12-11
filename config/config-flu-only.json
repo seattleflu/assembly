@@ -107,6 +107,12 @@
             "min_cov" : "20",
             "snp_qual_threshold" : "30",
             "snp_frequency" : "0.50"
+          },
+        "percent_identity":
+          {
+            "references": ["vic_Brisbane_60_2008", "yam_Wisconsin_01_2010"],
+            "segment": "HA",
+            "min_percent_identity": 95
           }
       }
 }

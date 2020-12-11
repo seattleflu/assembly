@@ -19,10 +19,22 @@ include: "Snakefile-base"
 # input function for the rule aggregate
 def aggregate_input(wildcards):
     """
-    Returns input for rule aggregate based on output from checkpoint align_rate.
-    Set minimum align rate in config under "min_align_rate".
+    Returns input for rule aggregate based on output from checkpoints.
+
+    1. Checkpoint `mapped_reads`: Do not generate consensus genome if not all
+    segments have aligned reads or if the number of mapped reads is less than
+    or equal to the minimum reads required.
+
+    2. Checkpoint `percent_identity`: Check the percent identity if the
+    reference is listed in `config.params.percent_identity.reference`. Do not
+    upload consensus genome to ID3C if the percent identity is less than the
+    minimum required.
+
+    If a sample/reference pair passes both checkpoints, then it will generate
+    a consensus genome that is uploaded ot ID3C.
     """
-    with open(checkpoints.mapped_reads.get(sample=wildcards.sample, reference=wildcards.reference).output[0]) as f:
+    # All sample/reference pairs go through the `mapped_reads` checkpoint
+    with open(checkpoints.mapped_reads.get(**wildcards).output[0]) as f:
         summary = json.load(f)
         all_segments_aligned = summary["all_segments_aligned"]
         min_reads = summary["minimum_reads_required"]
@@ -30,8 +42,17 @@ def aggregate_input(wildcards):
 
         if not all_segments_aligned or mapped <= min_reads:
             return rules.not_mapped.output.not_mapped
-        else:
-            return rules.post_masked_consensus_and_summary_stats_to_id3c.output.successful_post
+
+    if wildcards.reference in config["params"]["percent_identity"]["references"]:
+        # Only reference this checkpoint within the if statement so that
+        # the checkpoint is not included in the DAG when not required.
+        with open(checkpoints.percent_identity.get(**wildcards).output[0]) as f:
+            percent_identity = json.load(f)["percent_identity"]
+
+            if percent_identity < config["params"]["percent_identity"]["min_percent_identity"]:
+                return rules.divergent_sequence.output.divergent_sequence
+
+    return rules.post_masked_consensus_and_summary_stats_to_id3c.output.successful_post
 
 
 rule all:
@@ -86,6 +107,31 @@ rule fasta_headers:
             {output.masked_consensus} > {output.masked_consensus}.temp
         mv {output.masked_consensus}.temp {output.masked_consensus}
 
+        """
+
+checkpoint percent_identity:
+    input:
+        reference = "references/{reference}.fasta",
+        masked_consensus = rules.fasta_headers.output.masked_consensus
+    output:
+        percent_identity = "summary/percent_identity/{reference}/{sample}.json"
+    params:
+        segment = config["params"]["percent_identity"]["segment"]
+    shell:
+        """
+        python3 scripts/checkpoint_percent_identity.py \
+            --reference {input.reference} \
+            --consensus {input.masked_consensus} \
+            --segment {params.segment} \
+            --output {output.percent_identity}
+        """
+
+rule divergent_sequence:
+    output:
+        divergent_sequence = "summary/divergent_sequence/{reference}/{sample}.txt"
+    shell:
+        """
+        touch {output.divergent_sequence}
         """
 
 rule metadata_to_json:

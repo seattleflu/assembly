@@ -5,7 +5,7 @@
     },
     "sample_reference_pairs": {
     },
-    "raw_read_length": 150,
+    "raw_read_length": 100,
     "reference_viruses": {
         "sars-cov-2": {}
     },

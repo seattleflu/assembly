@@ -346,15 +346,6 @@ rule mask_consensus:
             -fo {output.masked_consensus}
         """
 
-rule combined_fasta:
-    output:
-        combined_fasta = "consensus_genomes/batch-{current_datetime}.fasta"
-                          .format(current_datetime=datetime.now().date())
-    shell:
-        """
-        touch {output.combined_fasta}
-        """
-
 rule clean:
     message: "Removing directories: {params}"
     params:

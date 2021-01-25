@@ -203,9 +203,5 @@ rule aggregate:
         aggregate_input = aggregate_input
     output:
         aggregate_summary = "summary/aggregate/{reference}/{sample}.log"
-    params:
-        combined_fasta = rules.combined_fasta.output
     run:
-        if input.aggregate_input.split(".")[-1] == "fasta":
-            shell("cat {input.aggregate_input} >> {params.combined_fasta}")
         shell("echo 'Final output: {input.aggregate_input}' > {output}")

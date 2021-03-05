@@ -177,8 +177,8 @@ Generates [Pileup](https://en.wikipedia.org/wiki/Pileup_format) for BAM file usi
   * `-A` to not discard anomalous read pairs
   * `-Q` to set the minimum base quality to consider a read (set to match the minimum in `varscan mpileup2snp` so that their coverage depths match)
 
-### 11. Call SNPs
-Calls SNPs from the Pileup based on parameters set in the config file using [varscan mpileup2snp](http://varscan.sourceforge.net/using-varscan.html#v2.3_mpileup2snp)
+### 11. Call Consensus
+Calls consensus (SNPs/indels) from the Pileup based on parameters set in the config file using [varscan mpileup2cns](http://varscan.sourceforge.net/using-varscan.html#v2.3_mpileup2cns)
 
 ### 12. Zip VCF
 Compress VCF using [bgzip](http://www.htslib.org/doc/bgzip.html), which allows indexes to be built against the file and allows the file be used without decompressing it.

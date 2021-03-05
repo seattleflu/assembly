@@ -7,8 +7,8 @@ Basic steps:
     2. Map trimmed reads to each reference genomes in the reference panel using
        bowtie2 # This step may change with time
     ~3. Remove duplicate reads using Picard~
-    4. Call SNPs using varscan
-    5. Use SNPs to generate full consensus genomes for each sample x reference
+    4. Call consensus(SNPs/indels) using varscan
+    5. Use consensus to generate full consensus genomes for each sample x reference
        virus combination
     6. Compute summary statistics for each sample x refernce virus combination
 
@@ -258,7 +258,7 @@ rule pileup:
             -f {input.reference}
         """
 
-rule call_snps:
+rule call_consensus:
     input:
         pileup = rules.pileup.output.pileup
     output:
@@ -271,17 +271,19 @@ rule call_snps:
         "benchmarks/{sample}_{reference}.varscan"
     shell:
         """
-        varscan mpileup2snp \
+        varscan mpileup2cns \
             {input.pileup} \
             --min-coverage {params.min_cov} \
             --min-avg-qual {params.snp_qual_threshold} \
             --min-var-freq {params.snp_frequency} \
+            --strand-filter 0 \
+            --variants 1 \
             --output-vcf 1 > {output.vcf}
         """
 
 rule zip_vcf:
     input:
-        vcf = rules.call_snps.output.vcf
+        vcf = rules.call_consensus.output.vcf
     output:
         bcf = "process/vcfs/{reference}/{sample}.vcf.gz"
     shell:

@@ -177,35 +177,30 @@ Generates [Pileup](https://en.wikipedia.org/wiki/Pileup_format) for BAM file usi
   * `-A` to not discard anomalous read pairs
   * `-Q` to set the minimum base quality to consider a read (set to match the minimum in `varscan mpileup2snp` so that their coverage depths match)
 
-### 11. Call Consensus
-Calls consensus (SNPs/indels) from the Pileup based on parameters set in the config file using [varscan mpileup2cns](http://varscan.sourceforge.net/using-varscan.html#v2.3_mpileup2cns)
-
-### 12. Zip VCF
-Compress VCF using [bgzip](http://www.htslib.org/doc/bgzip.html), which allows indexes to be built against the file and allows the file be used without decompressing it.
-
-### 13. Index BCF
-Creates index for compressed VCF using [bcftools index](https://samtools.github.io/bcftools/bcftools.html#index). This index is necessary for creating the consensus genome using the compressed VCF.
-
-### 14. VCF to consensus
-Create consensus genome by applying VCF variants to the reference genome using [bcftools consensus](https://samtools.github.io/bcftools/bcftools.html#consensus). This does not account for coverage, so it will just fill in blanks with the base from the reference genome.
-
-### 15. Create bed file
+### 11. Create bed file
 Creates a BED file for positions that need to be masked in the consensus genome. Positions need to be masked if they are below the minimum coverage depth.
 
-### 16. Mask consensus
-Masks the consensus genome with "N" at bases where coverage is below the `min_cov` parameter using [bedtools maskfasta](https://bedtools.readthedocs.io/en/latest/content/tools/maskfasta.html).
+### 12. Call Consensus
+Calls consensus (SNPs/indels) from the Pileup based on parameters set in the config file using [varscan mpileup2cns](http://varscan.sourceforge.net/using-varscan.html#v2.3_mpileup2cns)
 
-### 17. FASTA headers
+### 13. Zip VCF
+Compress VCF using [bgzip](http://www.htslib.org/doc/bgzip.html), which allows indexes to be built against the file and allows the file be used without decompressing it.
+
+### 14. Index BCF
+Creates index for compressed VCF using [bcftools index](https://samtools.github.io/bcftools/bcftools.html#index). This index is necessary for creating the consensus genome using the compressed VCF.
+
+### 15. VCF to consensus
+Create consensus genome by applying VCF variants to the reference genome using [bcftools consensus](https://samtools.github.io/bcftools/bcftools.html#consensus).
+This does not account for coverage, so we pass it the BEDfile of low coverage sites with the `--mask` option to mask these sites with `N`.
+
+### 16. FASTA headers
 Edits the FASTA headers to fit the pattern needed for downstream analysis.
 Example FASTA header: `>SFS-UUID|SFS-UUID-PB2|H1N1pdm|PB2`
 1. Replace reference sequence name with the NWGC sample ID using Perl to perform "lookaround" regex matches
 2. Uses [seqkit replace](https://bioinf.shenwei.me/seqkit/usage/#replace) to replace the NWGC sample ID with the SFS UUID.
 3.  Create the UUID-gene combination using AWK
 
-### 18. Combined FASTA
-Creates the final combined FASTA file that will have all the consensus genomes generated in a day.
-
-### 19. Aggregate
+### 17. Aggregate
 This is the last rule of the pipeline that prints out the final result of each sample/reference pair. If a consensus genome is generated, then this will also add it to the final combined FASTA.
 
 The input of this rule differs based on the result of the checkpoint, so this rule dictates the final outcome of each sample/reference pair.

@@ -7,8 +7,8 @@ Basic steps:
     2. Map trimmed reads to each reference genomes in the reference panel using
        bowtie2 # This step may change with time
     ~3. Remove duplicate reads using Picard~
-    4. Call SNPs using varscan
-    5. Use SNPs to generate full consensus genomes for each sample x reference
+    4. Call consensus(SNPs/indels) using varscan
+    5. Use consensus to generate full consensus genomes for each sample x reference
        virus combination
     6. Compute summary statistics for each sample x refernce virus combination
 
@@ -258,7 +258,24 @@ rule pileup:
             -f {input.reference}
         """
 
-rule call_snps:
+rule create_bed_file:
+    input:
+        pileup = rules.pileup.output.pileup
+    output:
+        bed_file = "summary/low_coverage/{reference}/{sample}.bed"
+    params:
+        min_cov = config["params"]["varscan"]["min_cov"],
+        min_freq = config["params"]["varscan"]["snp_frequency"]
+    shell:
+        """
+        python scripts/create_bed_file_for_masking.py \
+            --pileup {input.pileup} \
+            --min-cov {params.min_cov} \
+            --min-freq {params.min_freq} \
+            --bed-file {output.bed_file}
+        """
+
+rule call_consensus:
     input:
         pileup = rules.pileup.output.pileup
     output:
@@ -271,17 +288,19 @@ rule call_snps:
         "benchmarks/{sample}_{reference}.varscan"
     shell:
         """
-        varscan mpileup2snp \
+        varscan mpileup2cns \
             {input.pileup} \
             --min-coverage {params.min_cov} \
             --min-avg-qual {params.snp_qual_threshold} \
             --min-var-freq {params.snp_frequency} \
+            --strand-filter 0 \
+            --variants 1 \
             --output-vcf 1 > {output.vcf}
         """
 
 rule zip_vcf:
     input:
-        vcf = rules.call_snps.output.vcf
+        vcf = rules.call_consensus.output.vcf
     output:
         bcf = "process/vcfs/{reference}/{sample}.vcf.gz"
     shell:
@@ -303,6 +322,7 @@ rule vcf_to_consensus:
     input:
         bcf = rules.zip_vcf.output.bcf,
         index = rules.index_bcf.output.index,
+        mask = rules.create_bed_file.output.bed_file,
         ref = "references/{reference}.fasta"
     output:
         consensus_genome = "consensus_genomes/{reference}/{sample}.consensus.fasta"
@@ -311,39 +331,9 @@ rule vcf_to_consensus:
     shell:
         """
         cat {input.ref} | \
-            bcftools consensus {input.bcf} > \
+            bcftools consensus {input.bcf} \
+                --mask {input.mask} > \
             {output.consensus_genome}
-        """
-
-rule create_bed_file:
-    input:
-        pileup = rules.pileup.output.pileup
-    output:
-        bed_file = "summary/low_coverage/{reference}/{sample}.bed"
-    params:
-        min_cov = config["params"]["varscan"]["min_cov"],
-        min_freq = config["params"]["varscan"]["snp_frequency"]
-    shell:
-        """
-        python scripts/create_bed_file_for_masking.py \
-            --pileup {input.pileup} \
-            --min-cov {params.min_cov} \
-            --min-freq {params.min_freq} \
-            --bed-file {output.bed_file}
-        """
-
-rule mask_consensus:
-    input:
-        consensus_genome = rules.vcf_to_consensus.output.consensus_genome,
-        low_coverage = rules.create_bed_file.output.bed_file
-    output:
-        masked_consensus = temp("consensus_genomes/{reference}/{sample}.temp_consensus.fasta")
-    shell:
-        """
-        bedtools maskfasta \
-            -fi {input.consensus_genome} \
-            -bed {input.low_coverage} \
-            -fo {output.masked_consensus}
         """
 
 rule clean:

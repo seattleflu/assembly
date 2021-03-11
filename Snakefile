@@ -69,7 +69,7 @@ rule nwgc_sfs_map:
 rule fasta_headers:
     input:
         key_value_file = rules.nwgc_sfs_map.output,
-        masked_consensus = rules.mask_consensus.output
+        masked_consensus = rules.vcf_to_consensus.output
     output:
         masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
     shell:

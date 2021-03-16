@@ -251,7 +251,7 @@ rule pileup:
         "benchmarks/{sample}_{reference}.mpileup"
     shell:
         """
-        samtools mpileup -a -A \
+        samtools mpileup -a -A -B \
             -Q {params.min_base_qual} \
             -d {params.depth} \
             {input.sorted_bam} > {output.pileup} \

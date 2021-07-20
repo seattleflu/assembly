@@ -1,6 +1,26 @@
 # Submssions
 This directory contains the scripts and data to prepare assembled consensus genomes for submission to GISAID, GenBank, and WA DOH.
 
+## Setup
+1. Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) if you don't already have [Conda](https://docs.conda.io/en/latest/) installed
+1. Clone this repo:
+    ```
+    git clone https://github.com/seattleflu/assembly.git
+    ```
+1. Create conda environment for submissions:
+    ```
+    conda env create -f ./envs/submissions.yaml
+    ```
+1. Follow [instructions](../docs/SFS-assembly-steps.md#globus) to set up Globus account and connection.
+1. Install [Docker](https://docs.docker.com/get-docker/)
+1. Follow [instructions](https://github.com/seattleflu/documentation/wiki/Linelists#connect-to-the-production-id3c-database) to set up connection to ID3C.
+    - Ask `@dev-team` to grant your user the `assembly-exporter` role within ID3C
+1. Create an account for [GISAID](https://www.gisaid.org/)
+1. Create an account for [NCBI](https://www.ncbi.nlm.nih.gov/) (You can create an account linked to your UW net id)
+1. Ping Jover to get added to the NCBI SFS submissions group.
+1. Ping Jover to reach out to WA DOH to set up new account for SFT.
+
+
 ## Data
 
 Files stored in the `source-data/` directory are:
@@ -34,7 +54,6 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
 
 1. A member of NWGC will ping `#data-transfer-nwgc` channel in SFS Slack when a new sequence batch is available on Globus.
 1. Transfer assembly results from [NWGC Globus endpoint](https://app.globus.org/file-manager?origin_id=178d2980-769b-11e9-8e59-029d279f7e24&origin_path=%2Fseattle_flu_project%2Fivar_releases%2F) to the Fred Hutch rhino cluster
-    - See [docs](../docs/SFS-assembly-steps.md#globus) on how to set up Globus account and connection.
 1. Extract .tar.gz file on FH rhino cluster:
     ```
     tar -xvzf AAAKJKHM5.tar.gz -C /fh/fast/bedford_t/seattleflu/ivar-releases/20210701_fastq
@@ -54,7 +73,6 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
     - sequences that are VoCs should have major defining S gene mutations listed in [CoVariants](https://covariants.org/)
         - if major defining mutations are masked with Ns, add the NWGC id to `~/Documents/ivar-releases/Batch-20210701/excluded-vocs.txt`
 1. Download the NextClade TSV and save as `~/Documents/ivar-releases/Batch-20210701/nextclade.tsv`.
-1. Install [Docker](https://docs.docker.com/get-docker/)
 1. Pull down the [latest Docker image for VADR](https://hub.docker.com/r/staphb/vadr) maintained by StaPH-B
     ```
     docker pull staphb/vadr
@@ -85,8 +103,6 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
     - Try to find the correct barcode by looking up the barcode in the Metabase [Unknown barcode query](https://backoffice.seattleflu.org/metabase/question/439)
     - Ping Machiko to confirm and correct barcodes in the Excel metadata file.
     - Re-run the previous step after correcting Excel metadata file
-1. If this is the first time exporting SFS metadata from ID3C, follow [instructions](https://github.com/seattleflu/documentation/wiki/Linelists#connect-to-the-production-id3c-database) to set up connection to ID3C.
-    - Ask `@dev-team` to grant your user the `assembly-exporter` role within ID3C
 1. Export SFS/SCAN metadata from ID3C by running:
     ```
     PGSERVICE=seattleflu-production ./submissions/scripts/export_id3c_metadata \

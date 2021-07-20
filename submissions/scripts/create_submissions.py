@@ -26,6 +26,18 @@ base_dir = Path(__file__).resolve().parent.parent.parent
 SUBMISSION_GROUPS = ['scan', 'sfs', 'wa-doh']
 SFS = 'Seattle Flu Study'
 SFS_ADDRESS = 'University of Washington Medical Center, 1959 NE Pacific Street, Seattle, WA 98195, USA'
+IDENTIFIER_COLUMNS = [
+    'nwgc_id',
+    'batch',
+    'strain_name',
+    'phl_accession',
+    'altius_sample_identifier',
+    'sfs_sample_identifier',
+    'sfs_sample_barcode',
+    'status',
+    'gisaid_accession',
+    'genbank_accession',
+]
 
 
 def text_to_list(text_file: str) -> List[str]:
@@ -342,19 +354,6 @@ def create_identifiers_report(metadata: pd.DataFrame, output_dir: Path, batch_na
             row['sfs_sample_identifier'] = row['lab_accession_id']
 
         return row
-
-    identifier_columns = [
-        'nwgc_id',
-        'batch',
-        'strain_name',
-        'phl_accession',
-        'altius_sample_identifier',
-        'sfs_sample_identifier',
-        'sfs_sample_barcode',
-        'status',
-        'gisaid_accession',
-        'genbank_accession',
-    ]
 
     identifiers = metadata.copy(deep=True)
     identifiers['batch'] = batch_name + '_fastq'

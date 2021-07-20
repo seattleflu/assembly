@@ -133,6 +133,32 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
     - The `create_submissions` script should have created a separate TSV and FASTA file for each submission group, e.g. `20210701_scan_genbank_metadata.tsv` and `20210701_scan_genbank.fasta`
 1. Submit sequencing results to [WA DOH SFT](https://sft.wa.gov/)
     - Upload `Batch_20210701_sequencing_results.xlsx` to the `NW_Genomics` folder
+1. GISAID will send an email with accession numbers when the sequences have been published.
+Search for these accession numbers to get mapping between strain name and GISAID accessions:
+    - Navigate to the EpiCoV:tm: tab.
+    - Click on "Search"
+    - Click on "Select" in the lower right hand corner
+    - Copy and paste list of accession numbers into the pop-up box
+    - Click "OK" to select these sequences
+    - Click "Download" in the lower right hand corner
+    - Select "Patient status metadata" and click "Download" in the pop-up box
+    - Save file as `~/Documents/ivar-releases/Batch-20210701/gisaid_accessions.tsv`
+1. GenBank will send an email when sequences have been published.
+    - Go to the GenBank submission portal
+    - Find the submissions for this batch and download the "AccessionReport.tsv" for each submission
+    - Save the files as `~/Documents/ivar-releases/Batch-20210701/genbank_accessions_{1|2|3}.tsv`
+1. Merge accessions with identifiers by running:
+    ```
+    python3 ./submissions/scripts/merge_identifiers.py \
+        --identifiers ~/Documents/ivar-releases/Batch-20210701identifiers.tsv \
+        --gisaid-accessions ~/Documents/ivar-releases/Batch-20210701/gisaid_accessions.tsv \
+        --genbank-accessions ~/Documents/ivar-releases/Batch-20210701/genbank_accessions_1.tsv ~/Documents/ivar-releases/Batch-20210701/genbank_accessions_2.tsv ~/Documents/ivar-releases/Batch-20210701/genbank_accessions_3.tsv
+        --output ~/Documents/ivar-releases/Batch-20210701/identifiers_with_accessions.tsv
+    ```
+1. Copy the identifiers from `~/Documents/ivar-releases/Batch-20210701/identifiers_with_accessions.tsv` and append them to the TSV in the
+[hcov19 identifiers repo](https://github.com/seattleflu/hcov19-sequence-identifiers)
+1. Push the new identifiers up the master branch of the repo.
+This will email Krisandra from WA DOH that new sequence identifiers have been added.
 
 
 ## Submission Errors

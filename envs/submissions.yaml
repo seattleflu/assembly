@@ -1,0 +1,10 @@
+name: sfs-submissions
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - biopython
+  - openpyxl
+  - pandas
+  - python=3.8

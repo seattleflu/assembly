@@ -1,0 +1,38 @@
+#!/bin/bash
+#
+# Usage: ./run_vadr <sequence-dir> <sequences.fasta>
+#
+# Run the NCBI VADR program on the given <sequence-dir> directory to mount and
+# the FASTA filename <sequences.fasta> using Docker.
+# Uses the recommended options described in the VADR GitHub repo:
+# https://github.com/ncbi/vadr/wiki/Coronavirus-annotation#howto
+#
+set -euo pipefail
+
+if [ -z ${1+x} ]; then
+    echo "A positional <sequence-dir> is required."
+    exit 1
+fi
+
+if [ -z ${2+x} ]; then
+    echo "A positional <sequences.fasta> is required."
+    exit 1
+fi
+
+docker run \
+        --rm \
+        --user "$(id -u):$(id -g)" \
+        --mount type=bind,src=${1},dst="/data",ro=false \
+        staphb/vadr /bin/bash -c \
+            "/opt/vadr/vadr/miniscripts/fasta-trim-terminal-ambigs.pl \
+                --minlen 50 --maxlen 30000 \
+                /data/${2} > trimmed-genbank.fasta; \
+            v-annotate.pl --split --cpu 8 --glsearch -f -s -r \
+                --noseqnamemax \
+                --nomisc --mkey sarscov2 \
+                --lowsim5term 2 --lowsim3term 2 \
+                --alt_fail lowscore,fstukcnf,insertnn,deletinn \
+                --mdir /opt/vadr/vadr-models/ \
+                /data/trimmed-genbank.fasta \
+                /data/genbank"
+

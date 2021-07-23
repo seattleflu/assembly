@@ -96,8 +96,8 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None) -> pd.Dat
 
         # Find rows in external metdata that match ID3C samples
         external_metadata = metadata.loc[metadata['nwgc_id'].isin(id3c_metadata['nwgc_id'])]
-        # Drop collection date and county columns since they are expected to come from ID3C
-        external_metadata = external_metadata.drop(columns=['collection_date', 'county'])
+        # Drop collection date, county, swab_type columns since they are expected to come from ID3C
+        external_metadata = external_metadata.drop(columns=['collection_date', 'county', 'swab_type'])
         # Merge ID3C metadata with the external metadata
         id3c_metadata = id3c_metadata.merge(external_metadata, on=['nwgc_id'], how='left')
 
@@ -159,7 +159,8 @@ def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
 
     washington_counties = text_to_list(base_dir / 'submissions/source-data/washington_counties.txt')
     washington_counties = [ county.lower() for county in washington_counties ]
-    manual_annotations = pd.read_csv( base_dir / 'submissions/source-data/manual_location_annotations.tsv', sep='\t')
+    manual_annotations = pd.read_csv( base_dir / 'submissions/source-data/manual_location_annotations.tsv',
+                                     dtype='string', sep='\t')
 
     return metadata.apply(standardize_location, axis=1)
 

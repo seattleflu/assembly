@@ -12,6 +12,7 @@ This directory contains the scripts and data to prepare assembled consensus geno
     conda env create -f ./envs/submissions.yaml
     ```
 1. Follow [instructions](../docs/SFS-assembly-steps.md#globus) to set up Globus account and connection.
+    - _Note_: make sure to **not** install with "High Assurance" option since the NWGC endpoint does not support it
 1. Install [Docker](https://docs.docker.com/get-docker/)
 1. Follow [instructions](https://github.com/seattleflu/documentation/wiki/Linelists#connect-to-the-production-id3c-database) to set up connection to ID3C.
     - Ask `@dev-team` to grant your user the `assembly-exporter` role within ID3C
@@ -54,10 +55,15 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
 
 1. A member of NWGC will ping `#data-transfer-nwgc` channel in SFS Slack when a new sequence batch is available on Globus.
 1. Transfer assembly results from [NWGC Globus endpoint](https://app.globus.org/file-manager?origin_id=178d2980-769b-11e9-8e59-029d279f7e24&origin_path=%2Fseattle_flu_project%2Fivar_releases%2F) to the Fred Hutch rhino cluster
-1. Extract .tar.gz file on FH rhino cluster:
+1. Create directory for unzipping the .tar.gz file
+    ```
+    mkdir /fh/fast/bedford_t/seattleflu/ivar-releases/20210701_fastq
+    ```
+1. Extract .tar.gz file:
     ```
     tar -xvzf AAAKJKHM5.tar.gz -C /fh/fast/bedford_t/seattleflu/ivar-releases/20210701_fastq
     ```
+    _Skip the next two steps if you are not working from the FH rhino cluster_
 1. Create a local directory to hold all files related to this batch of sequences:
     ```
     mkdir ~/Documents/ivar-releases/Batch-20210701
@@ -81,6 +87,10 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
     ```
     ./submissions/scripts/run_vadr ~/Documents/ivar-releases/Batch-20210701/ AAAKJKHM5.fa
     ```
+    - If you run into permission denied error, make the script executable by running:
+        ```
+        chmod +x ./submissions/scripts/run_vadr
+        ```
     - This will create a sub-directory `~/Documents/ivar-releases/Batch-20210701/genbank/` with all output files from VADR
 1. Download the metadata Excel file from SFS Slack and save as `~/Documents/ivar-releases/Batch-20210701/external-metadata.xlsx`
     - The metadata file is usually in the original thread in the `#data-transfer-nwgc` channel

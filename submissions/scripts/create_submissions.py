@@ -25,7 +25,6 @@ from Bio import SeqIO
 base_dir = Path(__file__).resolve().parent.parent.parent
 SUBMISSION_GROUPS = ['scan', 'sfs', 'wa-doh']
 SFS = 'Seattle Flu Study'
-SFS_ADDRESS = 'University of Washington Medical Center, 1959 NE Pacific Street, Seattle, WA 98195, USA'
 IDENTIFIER_COLUMNS = [
     'nwgc_id',
     'batch',
@@ -476,11 +475,16 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
         if not pd.isna(row['county']):
             row['covv_location'] = row['covv_location'] + ' / ' +  row['county']
 
-        # Assign origin lab address and authors based on submission group
+        # Match origin lab address based on originating lab
+        row['covv_orig_lab_addr'] = lab_addresses.get(row['covv_orig_lab'])
+        if row['covv_orig_lab_addr'] is None:
+            sys.exit(f"Could not find lab address for {row['covv_orig_lab']}. " \
+                      "Please add the address to `submissions/source-data/lab_addresses.tsv`")
+
+        # Assign authors based on submission group
         row['covv_authors'] = authors['wa-doh']
-        row['covv_orig_lab_addr'] = 'unknown'
         if row['submission_group'] != 'wa-doh':
-            row['covv_orig_lab_addr'] = SFS_ADDRESS
+
             if row['submission_group'] == 'scan':
                 row['covv_authors'] = authors['scan']
             else:
@@ -494,6 +498,8 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
         return row
 
     authors = { group: load_authors(group) for group in SUBMISSION_GROUPS }
+    lab_addresses = pd.read_csv(base_dir / 'submissions/source-data/lab_addresses.tsv', sep='\t', dtype='string')
+    lab_addresses = lab_addresses.set_index('lab')['address'].to_dict()
     gisaid_file_base = f'SFS_{batch_name}_EpiCoV_BulkUpload'
     gisaid_fasta = f'{gisaid_file_base}.fasta'
 
@@ -552,7 +558,7 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
     gisaid_metadata['covv_seq_technology'] = 'Illumina Nextseq'
     gisaid_metadata['covv_assembly_method'] = 'Northwest Genomics Center Viral Pipeline'
     gisaid_metadata['covv_subm_lab'] = SFS
-    gisaid_metadata['covv_subm_lab_addr'] = SFS_ADDRESS
+    gisaid_metadata['covv_subm_lab_addr'] = lab_addresses[SFS]
 
     # Dynamic values based on metadata for each sample
     gisaid_metadata = gisaid_metadata.apply(add_dynamic_fields, args=(authors,), axis=1)

@@ -33,6 +33,9 @@ These files are named with their respective sources:
     * `sfs.txt`
     * `wa-doh.txt`
 
+* `lab_addresses.tsv` contains the lab name and addresses for external labs and SFS.
+These are required for GISAID submissions.
+
 * `manual_location_annotations.tsv` contains manual curations of location data from external labs.
 External labs only give the sample's county, but not the state.
 

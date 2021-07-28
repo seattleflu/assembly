@@ -212,8 +212,8 @@ e.g. `~/Documents/ivar-releases/Batch-20210701/gisaid-errors/20210701-resubmit-s
 1. Resubmit sequences to GISAID by uploading the subset files
 `SFS_20210701_EpiCoV_BulkUpload-subset.csv` and `SFS_20210701_EpiCoV_BulkUpload-subset.fasta`
 1. Reply to GISAID's email to confirm that the frameshifts have been verified and the sequences have been resubmitted.
-
-
+1. Update the [hcov19 identifiers repo](https://github.com/seattleflu/hcov19-sequence-identifiers) to mark the rejected sequences as "pending" under `status`.
+This will make it easier to track with samples are still be investigated for frameshift or assembly anomalies.
 ### GenBank
 - Before using the VADR program, GenBank would often flag sequences that have errors.
 - The same `extract_submission_subset.py` script can be used to pull out subset

@@ -55,13 +55,14 @@ def parse_previous_submissions(previous_subs_file: str) -> Set[str]:
 
     The *previous_subs_file* is expected to be a TSV with the columns
     `phl_accession`, `sfs_sample_barcode`, and `status`, where a "submitted"
-    status represents the sequence was submitted to GISAID/GenBank.
+    status represents the sequence was submitted to GISAID/GenBank and a
+    "pending" status represents the sequence was submitted but not yet accepted.
 
     Returns a list of sample ids for previously submitted sequences.
     """
     prev_subs_columns = ['phl_accession', 'sfs_sample_barcode', 'status']
     prev_subs = pd.read_csv(previous_subs_file,sep='\t', dtype='string', usecols=prev_subs_columns)
-    prev_subs = prev_subs.loc[prev_subs['status'] == 'submitted']
+    prev_subs = prev_subs.loc[prev_subs['status'].isin(['submitted', 'pending'])]
     return set(prev_subs['phl_accession'].combine_first(prev_subs['sfs_sample_barcode']).tolist())
 
 

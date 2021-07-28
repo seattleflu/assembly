@@ -123,18 +123,6 @@ def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
     """
     Standardize format of *metadata* collection date and location columns.
     """
-    def standardize_date(date_string: str) -> Optional[str]:
-        """
-        Standardize provided *date_string* and return in format %Y-%m-%d
-        Returns None if unable to parse *date_string*
-        """
-        from dateutil import parser
-        try:
-            return parser.parse(date_string).strftime('%Y-%m-%d')
-        except:
-            return None
-
-
     def standardize_location(metadata_row: pd.Series) -> pd.Series:
         """
         Standardize 'county' and 'state' columns within provided *metadata_row*.
@@ -155,7 +143,7 @@ def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
 
         return metadata_row
 
-    metadata['collection_date'] = metadata['collection_date'].apply(standardize_date)
+    metadata['collection_date'] = metadata['collection_date'].apply(standardize_date, args=('%Y-%m-%d',))
 
     washington_counties = text_to_list(base_dir / 'submissions/source-data/washington_counties.txt')
     washington_counties = [ county.lower() for county in washington_counties ]
@@ -163,6 +151,18 @@ def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
                                      dtype='string', sep='\t')
 
     return metadata.apply(standardize_location, axis=1)
+
+
+def standardize_date(date_string: str, format: str) -> Optional[str]:
+    """
+    Standardize provided *date_string* and return in *format*
+    Returns None if unable to parse *date_string*
+    """
+    from dateutil import parser
+    try:
+        return parser.parse(date_string).strftime(format)
+    except:
+        return None
 
 
 def add_assembly_metrics(metadata: pd.DataFrame, metrics_file: str) -> pd.DataFrame:

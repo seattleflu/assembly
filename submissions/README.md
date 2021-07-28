@@ -95,6 +95,8 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
         chmod +x ./submissions/scripts/run_vadr
         ```
     - This will create a sub-directory `~/Documents/ivar-releases/Batch-20210701/genbank/` with all output files from VADR
+1. Drag and drop the FASTA file to [Pangolin](https://pangolin.cog-uk.io/) and click "Start Analysis"
+1. When the analysis is complete, download the Pangolin lineages and save as `~/Documents/ivar-releases/Batch-20210701/pangolin.tsv`
 1. Download the metadata Excel file from SFS Slack and save as `~/Documents/ivar-releases/Batch-20210701/external-metadata.xlsx`
     - The metadata file is usually in the original thread in the `#data-transfer-nwgc` channel
     - Ping Machiko for the metadata file if it has not already been posted on Slack.
@@ -141,6 +143,7 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
         --id3c-metadata ~/Documents/ivar-releases/Batch-20210701/id3c-metadata-with-county.csv \
         --metrics ~/Documents/ivar-releases/Batch-20210701/AAAKJKHM5.metrics.tsv \
         --nextclade ~/Documents/ivar-releases/Batch-20210701/nextclade.tsv \
+        --pangolin ~/Documents/ivar-releases/Batch-20210701/pangolin.csv \
         --previous-submissions ~/Documents/ivar-releases/previous-submissions.tsv \
         --strain-id 9161
         --fasta ~/Documents/ivar-releases/Batch-20210701/AAAKJKHM5.fa \

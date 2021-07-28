@@ -407,42 +407,91 @@ def create_sample_status_report(metadata: pd.DataFrame, output_dir: Path, batch_
     metadata[sample_status_columns].to_csv(output_dir / f'{batch_name}_sample_status.csv', index=False)
 
 
-def create_wa_doh_report(metadata:pd.DataFrame, output_dir: Path, batch_name: str) -> None:
+def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path, batch_name: str) -> None:
     """
     Create an Excel report of sequences for samples in *metadata*.
 
     Follows the WA DOH template with the following columns:
     - LAB_ACCESSION_ID: Accession or specimen ID
     - GISAID_ID: ID assigned to 'Virus Name' field
-    - COLLECTION_DATE: Date of specimen collection
+    - SPECIMEN_COLLECTION_DATE: Date of specimen collection. Format as MM/DD/YYYY.
     - SUBMITTING_LAB: Name of sequencing laboratory. This should be consistent across all submissions.
     - SEQUENCE_REASON: Reason for sequencing.
-        Values: S-dropout, Suspected reinfection, Suspected vaccine breakthrough,
-                Sentinel surveillance, Outbreak, Other
-    - SEQUENCE_QUALITY: Values: Complete, Pending, Failed, Not Done, Low Quality
+        Select only from the options provided:
+            - Sentinel Surveillance
+            - Suspected Reinfection
+            - Suspected Vaccine Breakthrough
+            - Outbreak
+            - Other
+    - SEQUENCE_STATUS: Values: Complete, Failed, Low Quality
+    - PANGO_LINEAGE: Lineage written in Pangolin nomenclature.
+    - FIRST_NAME
+    - LAST_NAME
+    - MIDDLE_NAME
+    - DOB
+    - ALTERNATIVE_ID
+
+    Note: PII columns are not filled in because we do not ingest PII.
     """
+    doh_columns = [
+        'LAB_ACCESSION_ID',
+        'GISAID_ID',
+        'SPECIMEN_COLLECTION_DATE',
+        'SUBMITTING_LAB',
+        'SEQUENCE_REASON',
+        'SEQUENCE_STATUS',
+        'PANGO_LINEAGE',
+        'FIRST_NAME',
+        'LAST_NAME',
+        'MIDDLE_NAME',
+        'DOB',
+        'ALTERNATIVE_ID'
+    ]
+
     status_map = {
         'submitted': 'Complete',
-        'dropped duplicate': 'Complete',
         '>10% Ns': 'Low Quality',
-        'missing collection date': 'Pending',
         'failed': 'Failed'
     }
 
     column_map = {
         'lab_accession_id': 'LAB_ACCESSION_ID',
         'strain_name': 'GISAID_ID',
-        'collection_date': 'COLLECTION_DATE',
-        'originating_lab': 'SUBMITTING_LAB',
+        'collection_date': 'SPECIMEN_COLLECTION_DATE',
         'sequence_reason': 'SEQUENCE_REASON',
-        'status': 'SEQUENCE_QUALITY'
+        'status': 'SEQUENCE_STATUS',
+        'Lineage': 'PANGO_LINEAGE'
     }
 
-    doh_report = metadata.loc[metadata['originating_lab'] != 'sentinel'][column_map.keys()].copy(deep=True)
-    doh_report.loc[doh_report['collection_date'].isnull(), 'collection_date'] = 'N/A'
+    # PANGO lineages generated from running FASTA file through https://pangolin.cog-uk.io/
+    pango_columns = ['Sequence name', 'Lineage']
+    pango_lineages = pd.read_csv(pangolin, dtype='string', usecols=pango_columns)
+    pango_lineages['nwgc_id'] = pango_lineages['Sequence name'].apply(parse_fasta_id)
+
+    # Only submit sequences that are not controls, not duplicates, and not missing collection date
+    not_control = metadata['originating_lab'] != 'sentinel'
+    not_duplicate = metadata['status'] != 'dropped duplicate'
+    not_missing_date = metadata['status'] != 'missing collection date'
+    doh_report = metadata.loc[(not_control) & (not_duplicate) & (not_missing_date)].copy(deep=True)
+    doh_report = doh_report.merge(pango_lineages, on=['nwgc_id'], how='left')
+
+    # Convert date to MM/DD/YYYY format according to WA DOH template
+    doh_report['collection_date'] = doh_report['collection_date'].apply(standardize_date, args=('%m/%d/%Y',))
+    # Convert sequence status to WA DOH standardized values
     doh_report['status'] = doh_report['status'].apply(lambda x: status_map[x])
+    # Only include PANGO lineages for completed sequences
+    doh_report.loc[doh_report['status'] != 'Complete', 'Lineage'] = 'N/A'
+
+    # Hard-coded values
+    doh_report['SUBMITTING_LAB'] = 'NW Genomics'
+    doh_report['FIRST_NAME'] = 'N/A'
+    doh_report['LAST_NAME'] = 'N/A'
+    doh_report['MIDDLE_NAME'] = 'N/A'
+    doh_report['DOB'] = 'N/A'
+    doh_report['ALTERNATIVE_ID'] = 'N/A'
+
     doh_report.rename(columns=column_map, inplace=True)
-    doh_report.to_excel(output_dir / f'Batch_{batch_name}_sequencing_results.xlsx', engine='openpyxl', index=False)
+    doh_report[doh_columns].to_excel(output_dir / f'Batch_{batch_name}_sequencing_results.xlsx', engine='openpyxl', index=False)
 
 
 def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Path,
@@ -683,6 +732,8 @@ if __name__ == '__main__':
         help = "File path to the TSV of assembly metrics from NWGC")
     parser.add_argument("--nextclade", type=str, required=True,
         help = "File path to the NextClade TSV file")
+    parser.add_argument("--pangolin", type=str, required=True,
+        help = "File path to the Pangolin CSV file")
     parser.add_argument("--previous-submissions", type=str, required=True,
         help = "File path to TSV file containing previous submissions")
     parser.add_argument("--strain-id", type=int, required=True,
@@ -726,7 +777,7 @@ if __name__ == '__main__':
     create_identifiers_report(metadata, output_dir, batch_name)
     create_voc_reports(metadata, args.excluded_vocs, output_dir, batch_name)
     create_sample_status_report(metadata, output_dir, batch_name)
-    create_wa_doh_report(metadata, output_dir, batch_name)
+    create_wa_doh_report(metadata, args.pangolin, output_dir, batch_name)
 
     # Only create submissions for sequences that have status "submitted"
     submit_metadata = metadata.loc[metadata['status'] == 'submitted']

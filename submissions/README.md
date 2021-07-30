@@ -47,10 +47,6 @@ This is used to create the appropriate strain name based on the sample's origina
 * `washington_counties.txt` contains a list of all counties in the state of Washington.
 This will be used to flag samples with counties that are from outside of Washington.
 
-* `washington_pumas_to_county.csv` contains a mapping of Washington PUMAs to their counties.
-This file only contains PUMAs that map to **one** specific county within Washington.
-This is taken from the PUMA maps listed at
-https://www.census.gov/geographies/reference-maps/2010/geo/2010-pumas/washington.html
 
 ## Submission Process
 
@@ -121,19 +117,12 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
 1. Export SFS/SCAN metadata from ID3C by running:
     ```
     PGSERVICE=seattleflu-production ./submissions/scripts/export_id3c_metadata \
-        ~/Documents/ivar-releases/Batch-20210701/sfs-sample-barcodes.csv > ~/Documents/ivar-releases/Batch-20210701/id3c-export.csv
+        ~/Documents/ivar-releases/Batch-20210701/sfs-sample-barcodes.csv > ~/Documents/ivar-releases/Batch-20210701/id3c-metadata-with-county.csv
     ```
 1. Check the ID3C metadata include collection dates for all samples.
     - collection date may be missing if metadata has not been ingested into ID3C yet
     - ping `@dev-team` in `#informatics` with SFS sample barcodes if missing collection dates
     - submission of sequences missing collection date will have to be delayed
-1. Convert PUMAs in ID3C metadata to counties by running:
-    ```
-    python3 ./submissions/scripts/match_puma_to_county.py \
-        --metadata ~/Documents/ivar-releases/Batch-20210701/id3c-export.csv \
-        --output-metadata ~/Documents/ivar-releases/Batch-20210701/id3c-metadata-with-county.csv
-    ```
-    - records missing county will be output to stdout - these can be ignored as long as it's not __all__ records missing county
 1. Download the latest TSV of sequences from [GitHub](https://github.com/seattleflu/hcov19-sequence-identifiers/blob/master/hcov19-sequence-identifiers.tsv) and save as `~/Documents/ivar-releases/previous-submissions.tsv`
 1. Create submission files by running:
     ```

@@ -90,14 +90,20 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None) -> pd.Dat
     # Control samples are not going to be submitted
     metadata.loc[metadata['project'] == 'sentinel', 'submission_group'] = 'N/A'
     metadata['swab_type'] = 'unknown'
+    # All WA DOH samples should be baseline surveillance samples
+    metadata['baseline_surveillance'] = True
 
     if id3c_metadata_file:
         id3c_metadata = pd.read_csv(id3c_metadata_file, dtype='string')
+        # Convert PostgreSQL t/f values to Python boolean
+        id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].apply(
+            lambda x: True if x == 't' else False)
 
         # Find rows in external metdata that match ID3C samples
         external_metadata = metadata.loc[metadata['nwgc_id'].isin(id3c_metadata['nwgc_id'])]
-        # Drop collection date, county, swab_type columns since they are expected to come from ID3C
-        external_metadata = external_metadata.drop(columns=['collection_date', 'county', 'swab_type'])
+        # Drop collection date, county, swab_type, baseline_surveillance columns since they are expected to come from ID3C
+        columns_to_drop = ['collection_date', 'county', 'swab_type', 'baseline_surveillance']
+        external_metadata = external_metadata.drop(columns=columns_to_drop)
         # Merge ID3C metadata with the external metadata
         id3c_metadata = id3c_metadata.merge(external_metadata, on=['nwgc_id'], how='left')
 
@@ -516,6 +522,7 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
         This includes columns:
         - covv_virus_name
         - covv_location
+        - covv_sampling_strategy
         - covv_coverage
         - covv_orig_lab_addr
         - covv_authors
@@ -544,6 +551,11 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
         row['covv_virus_name'] = f'hCoV-19/{row["strain_name"]}'
         # Follow GISAIDS requirement of reporting coverage like '100x'
         row['covv_coverage'] = row['coverage'].split('.')[0] + 'x'
+
+        # Follow CDC guidelines to label "Baseline surveillance" in `covv_sampling_strategy` field
+        row['covv_sampling_strategy'] = None
+        if row['baseline_surveillance'] == True:
+            row['covv_sampling_strategy'] = 'Baseline surveillance'
 
         return row
 
@@ -587,7 +599,6 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
     column_map = {
         'collection_date': 'covv_collection_date',
         'originating_lab': 'covv_orig_lab',
-        'sequence_reason': 'covv_sampling_strategy'
     }
 
     # Create a deep copy so manipulations don't affect subsequent GenBank submissions
@@ -630,12 +641,17 @@ def parse_fasta_id(record_id: str) -> str:
 
 
 def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
-                            record_id_col: str, output_fasta: str) -> None:
+                            record_id_col: str, output_fasta: str,
+                            tag_baseline: bool = False) -> None:
     """
     Create a new FASTA file *output_fasta* by filtering for sequences that have
     `nwgc_id` that are included in the provided *metadata*.
     Replaces the original FASTA record id with the corresponding
     *record_id_col* in the *metadata*.
+
+    If *tag_baseline* is True, then add baseline tag to the sequences
+    according to CDC guidelines:
+        >SeqID [keyword=purposeofsampling:baselinesurveillance]
     """
     with open(fasta, 'r') as original, open(output_fasta, 'w') as output:
         for record in SeqIO.parse(original, 'fasta'):
@@ -647,6 +663,11 @@ def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
             if len(record_metadata) == 1:
                 record.id = record_metadata[0][record_id_col]
                 record.description = ''
+                # If required, add tag for baseline samples
+                if (tag_baseline == True and
+                    record_metadata[0]['baseline_surveillance'] == True):
+                    record.description = '[keyword=purposeofsampling:baselinesurveillance]'
+
                 SeqIO.write(record, output, 'fasta-2line')
 
 
@@ -714,7 +735,7 @@ def create_genbank_submission(metadata: pd.DataFrame, fasta: str, vadr_dir: str,
         if len(group_metadata.index) > 0:
             output_base = output_dir / f'{batch_name}_{group}_genbank'
             group_metadata[genbank_columns].to_csv(f'{output_base}_metadata.tsv', sep='\t', index=False)
-            create_submission_fasta(fasta, group_metadata, 'Sequence_ID', f'{output_base}.fasta')
+            create_submission_fasta(fasta, group_metadata, 'Sequence_ID', f'{output_base}.fasta', True)
 
 
 if __name__ == '__main__':

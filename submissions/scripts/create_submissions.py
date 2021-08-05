@@ -1,6 +1,6 @@
 """
-Create files for submissions to GISAID, GenBank, WA DOH and reports for VoCs
-and assembly summary.
+Create files for submission of SARS-CoV-2 sequences to GISAID, BioSample,
+GenBank, WA DOH and reports for VoCs and assembly summary.
 
 Creates the following files:
 - <batch-name>_metadata.csv: record of all metadata for potential debugging purposes
@@ -671,7 +671,68 @@ def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
                 SeqIO.write(record, output, 'fasta-2line')
 
 
-def create_genbank_submission(metadata: pd.DataFrame, fasta: str, vadr_dir: str,
+def create_biosample_submission(metadata: pd.DataFrame, output_dir: Path, batch_name: str) -> pd.DataFrame:
+    """
+    Create the TSV for submission to BioSample through the
+    NCBI webste (https://submit.ncbi.nlm.nih.gov/subs/biosample/)
+    """
+    def format_fields(row: pd.Series) -> pd.Series:
+        """
+        Add BioSample columns with specific format requirements for each *row*
+
+        Columns include:
+        - geo_loc_name
+        - isolate
+        """
+        # Follows GenBank's requirement for isolate name for easier matching
+        # of BioSample accession with GenBank record
+        row['isolate'] = f"SARS-CoV-2/human/{row['sample_name']}"
+
+        # Follows NCBI's requirement of reporting location as
+        # <country>:<state>,<county>
+        row['geo_loc_name'] = f"USA:{row.state}"
+        if not pd.isna(row['county']):
+            row['geo_loc_name'] = row['geo_loc_name'] + ',' + row['county']
+
+        return row
+
+    biosample_columns = [
+        'sample_name',
+        'bioproject_accession',
+        'organism',
+        'collected_by',
+        'collection_date',
+        'geo_loc_name',
+        'host',
+        'host_disease',
+        'isolate',
+        'isolation_source'
+    ]
+
+    column_map = {
+        'originating_lab': 'collected_by',
+        'strain_name': 'sample_name',
+    }
+
+    # Rename columns according to BioSample template
+    metadata.rename(columns=column_map, inplace=True)
+
+    # Apply NCBI format requirements
+    metadata = metadata.apply(format_fields, axis=1)
+
+    # Hard-coded values
+    # SFS BioProject accession (https://www.ncbi.nlm.nih.gov/bioproject/PRJNA746979)
+    metadata['bioproject_accession'] = 'PRJNA746979'
+    metadata['organism'] = 'Severe acute respiratory syndrome coronavirus 2'
+    metadata['host'] = 'Homo sapiens'
+    metadata['host_disease'] = 'COVID-19'
+    metadata['isolation_source'] = 'clinical'
+
+    metadata[biosample_columns].to_csv(output_dir / f'{batch_name}_biosample.tsv', sep='\t', index=False)
+    return metadata
+
+
+def create_genbank_submission(metadata: pd.DataFrame, fasta: str,
                               output_dir: Path, batch_name: str) -> None:
     """
     Create the TSV and FASTA files necessary for submissions
@@ -680,32 +741,9 @@ def create_genbank_submission(metadata: pd.DataFrame, fasta: str, vadr_dir: str,
     Creates a separate TSV + FASTA file for each project (scan, sfs, wa-doh)
     since they have different list of authors.
 
-    Excludes sequences that have been failed by the VADR program listed in
-    `*vadr_dir*/genbank.vadr.fail.list`
+    Expects the provided *metadata* to contain the BioSample columns created
+    by `create_biosample_submission`.
     """
-    def add_dynamic_fields(row: pd.Series) -> pd.Series:
-        """
-        Add GenBank columns based on columns in provided *row*
-        Columns include:
-        - Sequence_ID
-        - isolate
-        - country
-        """
-        # Within the strain name USA/<state>-<strain_id>/<year>
-        # the Sequence ID is the <state>-<strain_id>
-        row['Sequence_ID'] = row['strain_name'].split('/')[1]
-
-        # Follows GenBank's requirement for isolate name
-        row['isolate'] = f"SARS-CoV-2/human/{row['strain_name']}"
-
-        # Follows GenBank's requirement of reporting location as
-        # <country>:<state>,<county>
-        row['country'] = f"USA:{row.state}"
-        if not pd.isna(row['county']):
-            row['country'] = row['country'] + ',' + row['county']
-
-        return row
-
     genbank_columns = [
         'Sequence_ID',
         'isolate',
@@ -716,22 +754,22 @@ def create_genbank_submission(metadata: pd.DataFrame, fasta: str, vadr_dir: str,
     ]
 
     column_map = {
+        'geo_loc_name': 'country',
         'collection_date': 'collection-date',
-        'swab_type': 'isolation-source'
+        'isolation_source': 'isolation-source'
     }
 
-    failed_nwgc_ids = [parse_fasta_id(id) for id in text_to_list(vadr_dir / 'genbank.vadr.fail.list')]
+    # Rename BioSample columns to match GenBank template columns
+    metadata.rename(columns=column_map, inplace=True)
 
-    genbank_metadata = metadata.loc[~metadata['nwgc_id'].isin(failed_nwgc_ids)].copy(deep=True)
-    genbank_metadata.rename(columns=column_map, inplace=True)
-
-    # Hard-coded values
-    genbank_metadata['host'] = 'Homo sapiens'
-    # Dynamic values based on metadata for each sample
-    genbank_metadata = genbank_metadata.apply(add_dynamic_fields, axis=1)
+    # Within the sample_name USA/<state>-<strain_id>/<year>
+    # the Sequence ID is the <state>-<strain_id>
+    metadata['Sequence_ID'] = metadata['sample_name'].apply(
+        lambda x: x.split('/')[1]
+    )
 
     for group in SUBMISSION_GROUPS:
-        group_metadata = genbank_metadata.loc[genbank_metadata['submission_group'] == group]
+        group_metadata = metadata.loc[metadata['submission_group'] == group]
         if len(group_metadata.index) > 0:
             output_base = output_dir / f'{batch_name}_{group}_genbank'
             group_metadata[genbank_columns].to_csv(f'{output_base}_metadata.tsv', sep='\t', index=False)
@@ -804,4 +842,10 @@ if __name__ == '__main__':
     submit_metadata = metadata.loc[metadata['status'] == 'submitted']
 
     create_gisaid_submission(submit_metadata, args.fasta, output_dir, batch_name, args.gisaid_username)
-    create_genbank_submission(submit_metadata, args.fasta, vadr_dir, output_dir, batch_name)
+
+    # Only create NCBI submissions for sequences that passed VADR
+    failed_nwgc_ids = [parse_fasta_id(id) for id in text_to_list(vadr_dir / 'genbank.vadr.fail.list')]
+    ncbi_metadata = submit_metadata.loc[~submit_metadata['nwgc_id'].isin(failed_nwgc_ids)].copy(deep=True)
+
+    biosample_metadata = create_biosample_submission(ncbi_metadata, output_dir, batch_name)
+    create_genbank_submission(biosample_metadata, args.fasta, output_dir, batch_name)

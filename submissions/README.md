@@ -148,12 +148,24 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
     - Navigate to the EpiCoV:tm: tab.
     - Click on "Upload" and select "Batch Upload" in the pop-up.
     - Upload `SFS_20210701_EpiCoV_BulkUpload.csv` and `SFS_20210701_EpiCoV_BulkUpload.fasta` files.
+1. Submit sample data to [BioSample](https://submit.ncbi.nlm.nih.gov/subs/biosample/)
+    - Follow instructions in [NCBI protocol](https://www.protocols.io/view/sars-cov-2-ncbi-submission-protocol-sra-biosample-bui7nuhn) (ignore instructions for SRA submissions, we are currently not submitting to SRA)
+    - Upload `20210701_biosample.tsv` to the "Attributes" tab
+1. Submit sequencing results to [WA DOH SFT](https://sft.wa.gov/)
+    - Upload `Batch_20210701_sequencing_results.xlsx` to the `NW_Genomics` folder
+1. BioSample will send an email when accessions are available for download.
+    - Go to the ["My Submissions" page](https://submit.ncbi.nlm.nih.gov/subs/)
+    - Download the "attributes file with BioSample accessions" and save as `~/Documents/ivar-releases/Batch-20210701/biosample_accessions.tsv`
+1. Link BioSample accessions to the GenBank submissions metadata by running:
+    ```
+    python3 ./submissions/scripts/add_biosample_accessions.py \
+        --biosample ~/Documents/ivar-releases/Batch-20210701/biosample_accessions.tsv \
+        --genbank ~/Documents/ivar-releases/Batch-20210701/20210701_*_genbank_metadata.tsv
+    ```
 1. Submit sequences to [GenBank](https://submit.ncbi.nlm.nih.gov/subs/genbank/)
     - Follow instructions in [NCBI protocol](https://www.protocols.io/view/sars-cov-2-ncbi-consensus-submission-protocol-genb-bid7ka9n?step=2)
     - Create a separate submission for each submission group (SFS, SCAN, WA DOH) since they have different authors
-    - The `create_submissions` script should have created a separate TSV and FASTA file for each submission group, e.g. `20210701_scan_genbank_metadata.tsv` and `20210701_scan_genbank.fasta`
-1. Submit sequencing results to [WA DOH SFT](https://sft.wa.gov/)
-    - Upload `Batch_20210701_sequencing_results.xlsx` to the `NW_Genomics` folder
+    - There should be a separate TSV and FASTA file for each submission group, e.g. `20210701_scan_genbank_metadata_with_biosample.tsv` and `20210701_scan_genbank.fasta`
 1. GISAID will send an email with accession numbers when the sequences have been published.
 Search for these accession numbers to get mapping between strain name and GISAID accessions:
     - Navigate to the EpiCoV:tm: tab.

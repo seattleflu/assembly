@@ -30,8 +30,8 @@ docker run \
             v-annotate.pl --split --cpu 8 --glsearch -f -s -r \
                 --noseqnamemax \
                 --nomisc --mkey sarscov2 \
-                --lowsim5term 2 --lowsim3term 2 \
-                --alt_fail lowscore,fstukcnf,insertnn,deletinn \
+                --lowsim5seq 6 --lowsim3seq 6 \
+                --alt_fail lowscore,insertnn,deletinn \
                 --mdir /opt/vadr/vadr-models/ \
                 /data/trimmed-genbank.fasta \
                 /data/genbank"

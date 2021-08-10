@@ -121,6 +121,10 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None) -> pd.Dat
         metadata = metadata.loc[~metadata['nwgc_id'].isin(id3c_metadata['nwgc_id'])]
         metadata = metadata.append(id3c_metadata)
 
+    else:
+        metadata['sfs_sample_identifier'] = None
+        metadata['sfs_sample_barcode'] = None
+
     # Sort by NWGC ID to ensure order of metadata
     return metadata.sort_values('nwgc_id', ascending=True, ignore_index=True)
 

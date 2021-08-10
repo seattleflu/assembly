@@ -838,7 +838,10 @@ if __name__ == '__main__':
     metadata.to_csv(output_dir / f'{batch_name}_metadata.csv', index=False)
 
     create_identifiers_report(metadata, output_dir, batch_name)
-    create_voc_reports(metadata, args.excluded_vocs, output_dir, batch_name)
+
+    if args.id3c_metadata is not None:
+        create_voc_reports(metadata, args.excluded_vocs, output_dir, batch_name)
+
     create_sample_status_report(metadata, output_dir, batch_name)
     create_wa_doh_report(metadata, args.pangolin, output_dir, batch_name)
 

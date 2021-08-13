@@ -17,6 +17,12 @@ conda activate seattle-flu
 
 ## Set Up
 ### FASTQ Files
+#### For pooled (lane merged) fastq files
+The pipeline expects 2 total FASTQ files for each individual sample, with one fastq file for both Read 1 (R1) and Read 2 (R2).
+
+Expected filename format: `318375_R1.fastq.gz` where `318375` is the NWGC sample ID.
+
+#### For non-pooled (not lane merged) fastq files
 The pipeline expects 8 total FASTQ files for each individual sample, with Read 1 (R1) and Read 2 (R2) from 4 different lanes.
 
 Expected filename format: `318375_S12_L001_R1_001.fastq.gz` where `318375` is the NWGC sample ID.
@@ -43,6 +49,8 @@ positional arguments:
 optional arguments:
   -h, --help       show this help message and exit
 ```
+
+*Note. the `scripts/rename_fastq.py` script isn't currently setup to accept pooled (lane merged) fastq files*
 ### Setup Config File
 By default, the pipeline will generate combinations of all samples and references and try to create consensus genomes for all combinations.
 
@@ -112,6 +120,7 @@ __Note__: Remember to add the path of the output file to the config file after r
 Currently, `config/config-flu-only.json` has the most updated version of the configuration needed to run assembly.
 
 * `fastq_directory`: the path to the directory containing the fastq files
+* `fastq_pooling`: whether or not the input fastq files are pooled (lane merged) or non-pooled (non lane merged), expects either `"not_pooled"` or `"pooled"`
 * `ignored_samples`: an object containing keys that specify samples to be ignored
 * `sample_reference_pairs`: an object containing specific sample/reference pairs, with the keys refering to the samples and an array of references as the values.
 * `barcode_match`: the path to the file containing tab-delimited key-value pairs used to replace NWGC sample IDs with SFS UUIDs

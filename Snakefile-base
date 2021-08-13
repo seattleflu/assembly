@@ -67,11 +67,34 @@ def filter_combinator(combinator, config):
                 yield wc_comb
     return filtered_combinator
 
+def input_fastq_format(sample: str, config: dict) -> tuple:
+    """
+    Define the input fastq directory based on whether the user has input 
+    pooled (lane merged) or non-pooled (non lane merged) fastq files, based
+    on what the fastq_pooling has been set to in the *config*.
+    
+    This function will also determine all fastqs as a tuple of forward
+    and reverse within the fastq_directory in the *config*.
+
+    The fastqs are expected to have *sample* in the filename and
+    R1/R2 in the filename to differentiate forward and reverse reads.
+    """
+
+    if config['fastq_pooling'] == "not_pooled":
+        all_r1 = "process/merged/{sample}_R1.fastq.gz"
+        all_r2 = "process/merged/{sample}_R2.fastq.gz"
+    
+    if config['fastq_pooling'] == "pooled":
+        all_r1 = glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample))
+        all_r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
+
+    return all_r1, all_r2
 
 # Build static lists of reference genomes, ID's of samples, and ID -> input files
 all_references = [ v for v in  config['reference_viruses'].keys() ]
 all_ids = generate_sample_ids(config)
 mapped = {id: generate_all_files(id, config) for id in all_ids}
+input_fastq = {id: input_fastq_format(id, config) for id in all_ids}
 filtered_product = filter_combinator(product, config)
 
 #### Main pipeline
@@ -100,8 +123,8 @@ rule merge_lanes:
 
 rule trim_fastqs:
     input:
-        fastq_f = "process/merged/{sample}_R1.fastq.gz",
-        fastq_r = "process/merged/{sample}_R2.fastq.gz"
+        fastq_f = lambda wildcards: input_fastq[wildcards.sample][0],
+        fastq_r = lambda wildcards: input_fastq[wildcards.sample][1],
     output:
         trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq",
         trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq",

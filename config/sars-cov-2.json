@@ -1,5 +1,6 @@
 {
     "fastq_directory": "testdata",
+    "fastq_pooling": "not_pooled",
     "ignored_samples": {
         "Undetermined": {}
     },

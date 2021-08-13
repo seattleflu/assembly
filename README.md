@@ -147,6 +147,7 @@ Using [bowtie2-build](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#the
 
 ### 2. Merge lanes
 Concatenates 8 FASTQ files for each sample into 2 files (R1 and R2).
+This step is skipped if the fastq files are already pooled (lane merged).
 
 ### 3. Trim fastqs
 Trim raw FASTQ files with [Trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic), which cuts out adapter/illumina-specific sequences, trims the reads based on quality scores, and removes short reads.

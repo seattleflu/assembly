@@ -8,6 +8,7 @@ Creates the following files:
 - <batch_name>_total_vocs.csv: count of all VoCs to share with SFS #sequencing
 - <batch_name>_<study>_vocs.csv: summary of VoCs to share with each <study> in SFS Slack
 - Batch_<batch_name>_sequencing_results.xlsx: summary of sequencing results to upload to WA DOH SFT
+- Batch_<batch_name>_SCH_sequencing_results.xlsx: summary of SCH sequencing results to send to SCH
 - SFS_<batch_name>_EpiCoV_BulkUpload.csv: CSV to upload to GISAID's bulk upload portal
 - SFS_<batch_name>_EpiCoV_BulkUpload.fasta: FASTA to upload to GISAID's bulk upload portal
 - <batch_name>_<submission_group>__genbank_metadata.tsv: TSV to upload to GenBank's submission portal
@@ -419,7 +420,11 @@ def create_sample_status_report(metadata: pd.DataFrame, output_dir: Path, batch_
 
 def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path, batch_name: str) -> None:
     """
-    Create an Excel report of sequences for samples in *metadata*.
+    Create Excel report(s) of sequences for samples in *metadata*.
+    Creates a separate file for SCH sequences if present because they need to
+    be passed along to SCH to fill in the lab accession id.
+    All other sequences are included in a single file to be submitted to
+    WA DOH via SFT.
 
     Follows the WA DOH template with the following columns:
     - LAB_ACCESSION_ID: Accession or specimen ID
@@ -501,6 +506,24 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
     doh_report['ALTERNATIVE_ID'] = 'N/A'
 
     doh_report.rename(columns=column_map, inplace=True)
+
+    # Get subset of SCH sequences if there were SFS sequences in the is batch
+    sfs = doh_report.loc[doh_report['originating_lab'] == SFS]
+    if len(sfs.index) > 0:
+        sch_report = sfs.loc[sfs['source'] == 'SCH']
+        if len(sch_report.index) > 0:
+            # Provide the current lab accession id as the alternative id since
+            # SCH will fill in the original lab accession id
+            sch_report['ALTERNATIVE_ID'] = sch_report['LAB_ACCESSION_ID']
+            sch_report['LAB_ACCESSION_ID'] = None
+
+            sch_report[doh_columns].to_excel(output_dir / f'Batch_{batch_name}_SCH_sequencing_results.xlsx',
+                                             engine='openpyxl', index=False)
+
+            # Remove the SCH sequences from the DOH report so we don't submit
+            # the same sequences twice
+            doh_report = doh_report[~doh_report.index.isin(sch_report.index)]
+
     doh_report[doh_columns].to_excel(output_dir / f'Batch_{batch_name}_sequencing_results.xlsx', engine='openpyxl', index=False)
 
 

@@ -153,6 +153,9 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
 1. Submit sample data to [BioSample](https://submit.ncbi.nlm.nih.gov/subs/biosample/)
     - Follow instructions in [NCBI protocol](https://www.protocols.io/view/sars-cov-2-ncbi-submission-protocol-sra-biosample-bui7nuhn) (ignore instructions for SRA submissions, we are currently not submitting to SRA)
     - Upload `20210701_biosample.tsv` to the "Attributes" tab
+1. If there were SCH samples in this batch of sequences, email SCH the sequencing results:
+    - Email `Batch_20210701_SCH_sequencing_results.xlsx` to SCH as an encrypted email.
+    - SCH will fill in the original lab accession id and upload to WA DOH SFT
 1. Submit sequencing results to [WA DOH SFT](https://sft.wa.gov/)
     - Upload `Batch_20210701_sequencing_results.xlsx` to the `NW_Genomics` folder
 1. BioSample will send an email when accessions are available for download.

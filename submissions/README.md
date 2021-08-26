@@ -92,7 +92,7 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
         ```
     - This will create a sub-directory `~/Documents/ivar-releases/Batch-20210701/genbank/` with all output files from VADR
 1. Drag and drop the FASTA file to [Pangolin](https://pangolin.cog-uk.io/) and click "Start Analysis"
-1. When the analysis is complete, download the Pangolin lineages and save as `~/Documents/ivar-releases/Batch-20210701/pangolin.tsv`
+1. When the analysis is complete, download the Pangolin lineages and save as `~/Documents/ivar-releases/Batch-20210701/pangolin.csv`
 1. Download the metadata Excel file from SFS Slack and save as `~/Documents/ivar-releases/Batch-20210701/external-metadata.xlsx`
     - The metadata file is usually in the original thread in the `#data-transfer-nwgc` channel
     - Ping Machiko for the metadata file if it has not already been posted on Slack.
@@ -141,6 +141,8 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
         --excluded-vocs ~/Documents/ivar-releases/Batch-20210701/excluded-vocs.txt \
         --vadr-dir ~/Documents/ivar-releases/Batch-20210701/genbank
     ```
+    __NOTE__: Replace both the GISAID username and the strain ID.
+        - The strain ID should be the next integer after the last strain name in the previous submissions.
 1. Share reports of SFS VoCs to study point people following the VoC Reporting SOP pinned in `#sequencing`
     - reports are CSV files with the study name in the filename, e.g. `20210701_SCAN_vocs.csv`
 1. Post total VoC counts in `20210701_total_vocs.csv` to `#sequencing`

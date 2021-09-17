@@ -53,7 +53,7 @@ def parse_genbank(filenames: List[str]) -> pd.DataFrame:
     genbank_accessions = pd.DataFrame()
     for filename in filenames:
         genbank_accessions = genbank_accessions.append(
-            pd.read_csv(filename, sep='\t', dtype='string', usecols=genbank_columns.keys()))
+            pd.read_csv(filename, sep='\t', dtype='string', index_col=False, usecols=genbank_columns.keys()))
 
     return genbank_accessions.rename(columns=genbank_columns)
 

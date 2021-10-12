@@ -31,7 +31,7 @@ psql --quiet --no-align --tuples-only --set ON_ERROR_STOP= <<<"
             nwgc_id,
             shipping.genome_submission_metadata_v1.*
         from batch
-        left join shipping.genome_submission_metadata_v1 using (sfs_sample_barcode)
+        left join shipping.genome_submission_metadata_v1 on batch.sfs_sample_barcode in (genome_submission_metadata_v1.sfs_sample_barcode, genome_submission_metadata_v1.sfs_collection_barcode)
         order by nwgc_id
     );
 

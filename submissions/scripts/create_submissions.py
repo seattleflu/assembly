@@ -487,7 +487,9 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
     not_control = metadata['originating_lab'] != 'sentinel'
     not_duplicate = metadata['status'] != 'dropped duplicate'
     not_missing_date = metadata['status'] != 'missing collection date'
-    doh_report = metadata.loc[(not_control) & (not_duplicate) & (not_missing_date)].copy(deep=True)
+    # WA DOH asked us only include sequences from Washington state as of Oct 12, 2021
+    washington_state_only = metadata['state'] == 'Washington'
+    doh_report = metadata.loc[(not_control) & (not_duplicate) & (not_missing_date) & (washington_state_only)].copy(deep=True)
     doh_report = doh_report.merge(pango_lineages, on=['nwgc_id'], how='left')
 
     # Convert date to MM/DD/YYYY format according to WA DOH template

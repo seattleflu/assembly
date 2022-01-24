@@ -1,4 +1,4 @@
-# Submssions
+# Submissions
 This directory contains the scripts and data to prepare assembled consensus genomes for submission to GISAID, GenBank, and WA DOH.
 
 ## Setup
@@ -7,7 +7,12 @@ This directory contains the scripts and data to prepare assembled consensus geno
     ```
     git clone https://github.com/seattleflu/assembly.git
     ```
-1. Create conda environment for submissions:
+1. Clone this repo:
+    ```
+    git clone https://github.com/seattleflu/hcov19-sequence-identifiers.git
+    ```
+    Ask the dev team on #informatics if permission is restricted
+3. Create conda environment for submissions:
     ```
     conda env create -f ./envs/submissions.yaml
     ```
@@ -19,7 +24,7 @@ This directory contains the scripts and data to prepare assembled consensus geno
 1. Create an account for [GISAID](https://www.gisaid.org/)
 1. Create an account for [NCBI](https://www.ncbi.nlm.nih.gov/) (You can create an account linked to your UW net id)
 1. Ping Jover to get added to the NCBI SFS submissions group.
-1. Ping Jover to reach out to WA DOH to set up new account for SFT.
+1. Ping Melissa or Jover to reach out to WA DOH to set up new account for SFT.
 
 
 ## Data
@@ -53,7 +58,7 @@ This will be used to flag samples with counties that are from outside of Washing
 Example commands and filenames are based on sequence flow cell `AAAKJKHM5` released on `2021-07-01`
 
 1. A member of NWGC will ping `#data-transfer-nwgc` channel in SFS Slack when a new sequence batch is available on Globus.
-1. Transfer assembly results from [NWGC Globus endpoint](https://app.globus.org/file-manager?origin_id=178d2980-769b-11e9-8e59-029d279f7e24&origin_path=%2Fseattle_flu_project%2Fivar_releases%2F) to the Fred Hutch rhino cluster
+1. Transfer assembly results from [NWGC Globus endpoint](https://app.globus.org/file-manager?origin_id=178d2980-769b-11e9-8e59-029d279f7e24&origin_path=%2Fseattle_flu_project%2Fivar_releases%2F) to the Fred Hutch rhino cluster (if applicable), otherwise to your local computer.
 1. Create directory for unzipping the .tar.gz file
     ```
     mkdir /fh/fast/bedford_t/seattleflu/ivar-releases/20210701_fastq
@@ -78,7 +83,9 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
     - sequences that are VoCs should have major defining S gene mutations listed in [CoVariants](https://covariants.org/)
         - if major defining mutations are masked with Ns, add the NWGC id to `~/Documents/ivar-releases/Batch-20210701/excluded-vocs.txt`
 1. Download the NextClade TSV and save as `~/Documents/ivar-releases/Batch-20210701/nextclade.tsv`.
-1. Pull down the [latest Docker image for VADR](https://hub.docker.com/r/staphb/vadr) maintained by StaPH-B
+2. Drag and drop the FASTA file to [Pangolin](https://pangolin.cog-uk.io/) and click "Start Analysis"
+3. When the analysis is complete, download the Pangolin lineages and save as `~/Documents/ivar-releases/Batch-20210701/pangolin.csv`
+4. Pull down the [latest Docker image for VADR](https://hub.docker.com/r/staphb/vadr) maintained by StaPH-B
     ```
     docker pull staphb/vadr
     ```
@@ -91,25 +98,23 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
         chmod +x ./submissions/scripts/run_vadr
         ```
     - This will create a sub-directory `~/Documents/ivar-releases/Batch-20210701/genbank/` with all output files from VADR
-1. Drag and drop the FASTA file to [Pangolin](https://pangolin.cog-uk.io/) and click "Start Analysis"
-1. When the analysis is complete, download the Pangolin lineages and save as `~/Documents/ivar-releases/Batch-20210701/pangolin.csv`
 1. Download the metadata Excel file from SFS Slack and save as `~/Documents/ivar-releases/Batch-20210701/external-metadata.xlsx`
     - The metadata file is usually in the original thread in the `#data-transfer-nwgc` channel
-    - Ping Machiko for the metadata file if it has not already been posted on Slack.
+    - Ping Erika for the metadata file if it has not already been posted on Slack.
 1. Check the metadata in the `Metadata` or first sheet:
     - All external samples should have collection dates
     - A majority of external samples should have county.
     (It's fine if some are missing county, they will be assumed to be from Washington state)
     - There should _not_ be any dates earlier than February 2020
     - The dates should _not_ all be identical
-1. Report missing or erroneous metadata to Machiko to verify and correct.
+1. Report missing or erroneous metadata to Erika to verify and correct.
 1. If there are SFS/SCAN samples listed in the metadata sheet, create a CSV of SFS sample barcodes by running:
     ```
     python3 ./submissions/scripts/extract_sfs_identifiers.py \
         --metadata ~/Documents/ivar-releases/Batch-20210701/external-metadata.xlsx \
         --output ~/Documents/ivar-releases/Batch-20210701/sfs-sample-barcodes.csv
     ```
-1. If there are incorrectly formatted barcodes are printed to stdout:
+1. If there are incorrectly formatted barcodes are printed to stdout (open the file in a NON-Excel text editor):
     - Try to find the correct barcode by looking up the associated NWGC ID in the Metabase [NWGC ID lookup query](https://backoffice.seattleflu.org/metabase/question/641).
     - Try to find the correct barcode by looking up the barcode in the Metabase [Unknown barcode query](https://backoffice.seattleflu.org/metabase/question/439)
     - Ping Machiko to confirm and correct barcodes in the Excel metadata file.
@@ -119,7 +124,7 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
     PGSERVICE=seattleflu-production ./submissions/scripts/export_id3c_metadata \
         ~/Documents/ivar-releases/Batch-20210701/sfs-sample-barcodes.csv > ~/Documents/ivar-releases/Batch-20210701/id3c-metadata-with-county.csv
     ```
-1. Check the ID3C metadata include collection dates for all samples.
+1. Check the ID3C metadata include collection dates for all samples (open the file in a NON-Excel text editor).
     - collection date may be missing if metadata has not been ingested into ID3C yet
     - ping `@dev-team` in `#informatics` with SFS sample barcodes if missing collection dates
     - submission of sequences missing collection date will have to be delayed
@@ -146,22 +151,25 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
 1. Share reports of SFS VoCs to study point people following the VoC Reporting SOP pinned in `#sequencing`
     - reports are CSV files with the study name in the filename, e.g. `20210701_SCAN_vocs.csv`
 1. Post total VoC counts in `20210701_total_vocs.csv` to `#sequencing`
-1. Submit sequences to [GISAID](https://www.gisaid.org/).
+2. Share count of >10% Ns, control, failed, and submitted and attach files, e.g `20210701_sample_status.csv` to `#assembly`
+3. Submit sequences to [GISAID](https://www.gisaid.org/).
     - Navigate to the EpiCoV:tm: tab.
     - Click on "Upload" and select "Batch Upload" in the pop-up.
     - Upload `SFS_20210701_EpiCoV_BulkUpload.csv` and `SFS_20210701_EpiCoV_BulkUpload.fasta` files.
-1. Submit sample data to [BioSample](https://submit.ncbi.nlm.nih.gov/subs/biosample/)
+    - Select "Notify me only about NOT PREVIOUSLY REPORTED FRAMESHIFTS in this submission for reconfirmation of affected sequences"
+
+4. Submit sample data to [BioSample](https://submit.ncbi.nlm.nih.gov/subs/biosample/)
     - Follow instructions in [NCBI protocol](https://www.protocols.io/view/sars-cov-2-ncbi-submission-protocol-sra-biosample-bui7nuhn) (ignore instructions for SRA submissions, we are currently not submitting to SRA)
     - Upload `20210701_biosample.tsv` to the "Attributes" tab
-1. If there were SCH samples in this batch of sequences, email SCH the sequencing results:
+5. If there were SCH samples in this batch of sequences, email SCH the sequencing results:
     - Email `Batch_20210701_SCH_sequencing_results.xlsx` to SCH as an encrypted email.
     - SCH will fill in the original lab accession id and upload to WA DOH SFT
-1. Submit sequencing results to [WA DOH SFT](https://sft.wa.gov/)
+6. Submit sequencing results to [WA DOH SFT](https://sft.wa.gov/)
     - Upload `Batch_20210701_sequencing_results.xlsx` to the `NW_Genomics` folder
-1. BioSample will send an email when accessions are available for download.
+7. BioSample will send an email when accessions are available for download.
     - Go to the ["My Submissions" page](https://submit.ncbi.nlm.nih.gov/subs/)
     - Download the "attributes file with BioSample accessions" and save as `~/Documents/ivar-releases/Batch-20210701/biosample_accessions.tsv`
-1. Link BioSample accessions to the GenBank submissions metadata by running:
+8. Link BioSample accessions to the GenBank submissions metadata by running:
     ```
     python3 ./submissions/scripts/add_biosample_accessions.py \
         --biosample ~/Documents/ivar-releases/Batch-20210701/biosample_accessions.tsv \

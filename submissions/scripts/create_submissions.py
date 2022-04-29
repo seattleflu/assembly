@@ -97,8 +97,10 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None) -> pd.Dat
     if id3c_metadata_file:
         id3c_metadata = pd.read_csv(id3c_metadata_file, dtype='string')
         # Convert PostgreSQL t/f values to Python boolean
-        id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].apply(
-            lambda x: True if x == 't' else False)
+        d = {'t': True, 'f': False}
+        id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].map(d)
+        #id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].apply(
+            #lambda x: True if x == 't' else False)
 
         # Find rows in external metdata that match ID3C samples
         external_metadata = metadata.loc[metadata['nwgc_id'].isin(id3c_metadata['nwgc_id'])]
@@ -120,7 +122,7 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None) -> pd.Dat
         # Drop rows with nwgc_id in the ID3C metadata file
         # Ensures there are no duplicate rows in the final metadata DF
         metadata = metadata.loc[~metadata['nwgc_id'].isin(id3c_metadata['nwgc_id'])]
-        metadata = metadata.append(id3c_metadata)
+        metadata = pd.concat([metadata, id3c_metadata])
 
     else:
         metadata['sfs_sample_identifier'] = None
@@ -259,10 +261,10 @@ def add_clade_info(metadata: pd.DataFrame, nextclade_file: str) -> pd.DataFrame:
 
     Joins with metadata using the <nwgc_id>.
     """
-    nextclade = pd.read_csv(nextclade_file, sep='\t', usecols=['seqName', 'clade'])
+    nextclade = pd.read_csv(nextclade_file, sep='\t', usecols=['seqName', 'clade', 'Nextclade_pango'])
     nextclade['nwgc_id'] = nextclade['seqName'].apply(lambda s: s.split(".")[0].split('_')[1])
-
-    return metadata.merge(nextclade[['nwgc_id', 'clade']], on='nwgc_id', how='left')
+    nextclade.rename(columns={"Nextclade_pango": "pangolin"}, inplace=True)
+    return metadata.merge(nextclade[['nwgc_id', 'clade', 'pangolin']], on='nwgc_id', how='left')
 
 
 def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str]) -> pd.DataFrame:
@@ -347,7 +349,7 @@ def assign_strain_identifier(metadata: pd.DataFrame, strain_id: int) -> pd.DataF
 
 def create_identifiers_report(metadata: pd.DataFrame, output_dir: Path, batch_name: str) -> None:
     """
-    Create a repor that separates identifiers for easy tracking of samples.
+    Create a report that separates identifiers for easy tracking of samples.
 
     Follows the format of the identifiers TSV in
     https://github.com/seattleflu/hcov19-sequence-identifiers
@@ -393,8 +395,8 @@ def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
     vocs = pd.read_csv(base_dir / 'submissions/source-data/variants_of_concern.tsv', sep='\t')
     exclude_ids = text_to_list(excluded_vocs)
 
-    voc_samples = metadata.loc[(metadata['clade'].isin(vocs['clade'])) & (~metadata['nwgc_id'].isin(exclude_ids))]
-    voc_samples = voc_samples.merge(vocs, on=['clade'], how='inner')
+    voc_samples = metadata.loc[(metadata['pangolin'].isin(vocs['pangolin'])) & (~metadata['nwgc_id'].isin(exclude_ids))]
+    voc_samples = voc_samples.merge(vocs, on=['pangolin'], how='inner')
 
     all_vocs_counts = voc_samples.groupby(['who', 'pangolin']).size().reset_index(name='counts')
     all_vocs_counts.to_csv(output_dir / f'{batch_name}_total_vocs.csv', index=False)
@@ -439,7 +441,7 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
             - Outbreak
             - Other
     - SEQUENCE_STATUS: Values: Complete, Failed, Low Quality
-    - PANGO_LINEAGE: Lineage written in Pangolin nomenclature.
+    - PANGO_LINEAGE: Lineage written in NextClade nomenclature.
     - FIRST_NAME
     - LAST_NAME
     - MIDDLE_NAME
@@ -475,13 +477,13 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
         'collection_date': 'SPECIMEN_COLLECTION_DATE',
         'sequence_reason': 'SEQUENCE_REASON',
         'status': 'SEQUENCE_STATUS',
-        'Lineage': 'PANGO_LINEAGE'
+        'Nextclade_pango': 'PANGO_LINEAGE'
     }
 
-    # PANGO lineages generated from running FASTA file through https://pangolin.cog-uk.io/
-    pango_columns = ['Sequence name', 'Lineage']
-    pango_lineages = pd.read_csv(pangolin, dtype='string', usecols=pango_columns)
-    pango_lineages['nwgc_id'] = pango_lineages['Sequence name'].apply(parse_fasta_id)
+    # PANGO lineages generated from running FASTA file through https://clades.nextstrain.org/
+    pango_columns = ['seqName', 'Nextclade_pango']
+    pango_lineages = pd.read_csv(pangolin, dtype='string', sep='\t', usecols=pango_columns)
+    pango_lineages['nwgc_id'] = pango_lineages['seqName'].apply(parse_fasta_id)
 
     # Only submit sequences that are not controls, not duplicates, and not missing collection date
     not_control = metadata['originating_lab'] != 'sentinel'
@@ -497,7 +499,7 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
     # Convert sequence status to WA DOH standardized values
     doh_report['status'] = doh_report['status'].apply(lambda x: status_map[x])
     # Only include PANGO lineages for completed sequences
-    doh_report.loc[doh_report['status'] != 'Complete', 'Lineage'] = 'N/A'
+    doh_report.loc[doh_report['status'] != 'Complete', 'Nextclade_pango'] = 'N/A'
 
     # Hard-coded values
     doh_report['SUBMITTING_LAB'] = 'NW Genomics'
@@ -516,8 +518,9 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
         if len(sch_report.index) > 0:
             # Provide the current lab accession id as the alternative id since
             # SCH will fill in the original lab accession id
-            sch_report['ALTERNATIVE_ID'] = sch_report['LAB_ACCESSION_ID']
-            sch_report['LAB_ACCESSION_ID'] = None
+            pd.set_option('mode.chained_assignment', None)
+            sch_report.loc[:, 'ALTERNATIVE_ID'] = sch_report['LAB_ACCESSION_ID']
+            sch_report.loc[:, 'LAB_ACCESSION_ID'] = None
 
             sch_report[doh_columns].to_excel(output_dir / f'Batch_{batch_name}_SCH_sequencing_results.xlsx',
                                              engine='openpyxl', index=False)
@@ -820,8 +823,6 @@ if __name__ == '__main__':
         help = "File path to the TSV of assembly metrics from NWGC")
     parser.add_argument("--nextclade", type=str, required=True,
         help = "File path to the NextClade TSV file")
-    parser.add_argument("--pangolin", type=str, required=True,
-        help = "File path to the Pangolin CSV file")
     parser.add_argument("--previous-submissions", type=str, required=True,
         help = "File path to TSV file containing previous submissions")
     parser.add_argument("--strain-id", type=int, required=True,
@@ -868,7 +869,7 @@ if __name__ == '__main__':
         create_voc_reports(metadata, args.excluded_vocs, output_dir, batch_name)
 
     create_sample_status_report(metadata, output_dir, batch_name)
-    create_wa_doh_report(metadata, args.pangolin, output_dir, batch_name)
+    create_wa_doh_report(metadata, args.nextclade, output_dir, batch_name)
 
     # Only create submissions for sequences that have status "submitted"
     submit_metadata = metadata.loc[metadata['status'] == 'submitted']

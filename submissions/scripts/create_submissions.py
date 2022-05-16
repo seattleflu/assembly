@@ -37,6 +37,8 @@ IDENTIFIER_COLUMNS = [
     'status',
     'gisaid_accession',
     'genbank_accession',
+    'clade',
+    'pangolin',
 ]
 
 

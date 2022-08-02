@@ -83,8 +83,6 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
     - sequences that are VoCs should have major defining S gene mutations listed in [CoVariants](https://covariants.org/)
         - if major defining mutations are masked with Ns, add the NWGC id to `~/Documents/ivar-releases/Batch-20210701/excluded-vocs.txt`
 1. Download the NextClade TSV and save as `~/Documents/ivar-releases/Batch-20210701/nextclade.tsv`.
-2. Drag and drop the FASTA file to [Pangolin](https://pangolin.cog-uk.io/) and click "Start Analysis"
-3. When the analysis is complete, download the Pangolin lineages and save as `~/Documents/ivar-releases/Batch-20210701/pangolin.csv`
 4. Pull down the [latest Docker image for VADR](https://hub.docker.com/r/staphb/vadr) maintained by StaPH-B
     ```
     docker pull staphb/vadr
@@ -137,7 +135,6 @@ Example commands and filenames are based on sequence flow cell `AAAKJKHM5` relea
         --id3c-metadata ~/Documents/ivar-releases/Batch-20210701/id3c-metadata-with-county.csv \
         --metrics ~/Documents/ivar-releases/Batch-20210701/AAAKJKHM5.metrics.tsv \
         --nextclade ~/Documents/ivar-releases/Batch-20210701/nextclade.tsv \
-        --pangolin ~/Documents/ivar-releases/Batch-20210701/pangolin.csv \
         --previous-submissions ~/Documents/ivar-releases/previous-submissions.tsv \
         --strain-id 9161
         --fasta ~/Documents/ivar-releases/Batch-20210701/AAAKJKHM5.fa \

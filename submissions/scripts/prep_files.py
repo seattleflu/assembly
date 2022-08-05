@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime
 import tempfile
 import logging
+import conda.cli.python_api as Conda
 
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
@@ -97,3 +98,42 @@ if __name__ == '__main__':
     LOG.debug(f"Output folders created and populated: {output_batch_dir}, {output_fastq_dir}")
     LOG.debug(f"Deleting temp directory {temp_dir}")
     shutil.rmtree(temp_dir)
+
+    process_with_nextclade = None
+    while True:
+        process_with_nextclade = input("Process with NextClade? (y/n)").lower()
+        if process_with_nextclade not in ['y','n']:
+            print("Not a valid response")
+            continue
+        else:
+            break
+
+    if process_with_nextclade == 'y':
+        LOG.debug("Pulling data from NextClade")
+
+        # Get data files from NextClade
+        result = Conda.run_command('run', 'nextclade', 'dataset', 'get',
+            "--name=sars-cov-2",
+            f"--output-dir={output_batch_dir}/data/sars-cov-2"
+        )
+
+        if result and len(result)==3 and result[2] == 0:
+            LOG.debug("Successfully downloaded data/sars-cov-2 from NextClade.")
+        else:
+            raise Exception('Error: Nexclade sars-cov-2 data download failed.')
+
+
+        LOG.debug("Analyzing FASTA file with NextClade.")
+        fasta_file = Path(output_batch_dir, assembly_filename_stem).with_suffix('.fa')
+        nextclade_output = Path(output_batch_dir,'nextclade.tsv')
+        result = Conda.run_command('run', 'nextclade', 'run',
+            f"--input-dataset={output_batch_dir}/data/sars-cov-2",
+            f"--output-tsv={nextclade_output}",
+            f"{fasta_file}"
+        )
+        if result[2] == 0:
+           LOG.debug(f"NextClade processing complete: {nextclade_output}")
+        else:
+           raise Exception(f"Error: NextClade processing of {fasta_file} failed:\n {result}")
+
+    LOG.debug("Completed.")

@@ -7,4 +7,6 @@ dependencies:
   - biopython
   - openpyxl
   - pandas
+  - conda
+  - nextclade
   - python=3.8

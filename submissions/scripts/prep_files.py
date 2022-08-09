@@ -10,8 +10,8 @@ from pathlib import Path
 from datetime import datetime
 import tempfile
 import logging
+import pandas as pd
 import conda.cli.python_api as Conda
-
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
@@ -24,6 +24,15 @@ logging.captureWarnings(True)
 
 LOG = logging.getLogger(__name__)
 LOG.setLevel(LOG_LEVEL)
+
+def count_s_occurrences(values):
+    count = 0
+    if not isinstance(values, list):
+        return count
+    for item in values:
+        if isinstance(item, str) and item.lower().strip().startswith("s:"):
+            count += 1
+    return count
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -88,9 +97,6 @@ if __name__ == '__main__':
     shutil.copy(fasta_file, batch_dir)
     shutil.copy(metrics_file, batch_dir)
 
-    LOG.debug("Creating empty file: excluded-vocs.txt (to be populated manually)")
-    open(Path(batch_dir, 'excluded-vocs.txt'), 'w').close()
-
     # copy contents of temp_dir to output_dir
     shutil.copytree(batch_dir, output_batch_dir)
     shutil.copytree(fastq_dir, output_fastq_dir)
@@ -135,5 +141,36 @@ if __name__ == '__main__':
            LOG.debug(f"NextClade processing complete: {nextclade_output}")
         else:
            raise Exception(f"Error: NextClade processing of {fasta_file} failed:\n {result}")
+
+        #load nextclade.txv to dataframe
+        nextclade_df = pd.read_csv(nextclade_output, sep="\t")
+
+        nextclade_df["LIMS"] = nextclade_df["seqName"].str.extract("^[^\d]*(\d+)").astype(int)
+
+        nextclade_df["aaSubstitutions_s_count"] = nextclade_df["aaSubstitutions"].str.split(",").apply(count_s_occurrences)
+        nextclade_df["aaInsertions_s_count"] = nextclade_df["aaSubstitutions"].str.split(",").apply(count_s_occurrences)
+        nextclade_df["aaDeletions_s_count"] = nextclade_df["aaSubstitutions"].str.split(",").apply(count_s_occurrences)
+        nextclade_df["aaChanges_s_total"] = nextclade_df["aaSubstitutions_s_count"] + \
+                                            nextclade_df["aaInsertions_s_count"] + \
+                                            nextclade_df["aaDeletions_s_count"]
+
+        excluded_vocs = nextclade_df[
+                (nextclade_df["errors"].notnull()) |
+                (nextclade_df["clade"].isin(["19A","19B","recombinant"])) |
+                ("S" in nextclade_df["failedGenes"].str.split(",")) |
+                (nextclade_df["aaChanges_s_total"] < 3) |
+                (nextclade_df["qc.frameShifts.frameShifts"].str.split(",").apply(count_s_occurrences) > 0)]
+
+        metadata = pd.read_excel(args.metadata_file)
+
+        # remove twist positives from excluded VOCs
+        twist_positives = metadata[metadata["Project"].str.lower()=="twist positive"]
+        excluded_vocs=pd.merge(excluded_vocs, twist_positives, on=["LIMS"], how="outer", indicator=True)
+        excluded_vocs=excluded_vocs[excluded_vocs["_merge"]=="left_only"]
+
+        LOG.debug(f'Excluded VOCs:{excluded_vocs[["LIMS", "seqName", "clade", "qc.missingData.status", "aaChanges_s_total", "qc.frameShifts.frameShifts", "failedGenes", "errors"]]}')
+
+        excluded_vocs[['LIMS']].to_csv(Path(output_batch_dir, 'excluded-vocs.txt'), header=False, index=False)
+        LOG.debug(f"Saved {len(excluded_vocs)} NWGC ids to {Path(output_batch_dir, 'excluded-vocs.txt')}.")
 
     LOG.debug("Completed.")

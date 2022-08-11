@@ -12,6 +12,7 @@ import tempfile
 import logging
 import pandas as pd
 import conda.cli.python_api as Conda
+import docker
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
@@ -172,5 +173,52 @@ if __name__ == '__main__':
 
         excluded_vocs[['LIMS']].to_csv(Path(output_batch_dir, 'excluded-vocs.txt'), header=False, index=False)
         LOG.debug(f"Saved {len(excluded_vocs)} NWGC ids to {Path(output_batch_dir, 'excluded-vocs.txt')}.")
+
+
+    # process with VADR
+    process_with_vadr = None
+    docker_client = None
+    while True:
+        process_with_vadr = input("Process with VADR? (y/n)").lower()
+        if process_with_vadr not in ['y','n']:
+            print("Not a valid response")
+            continue
+        elif process_with_vadr == 'y':
+            try:
+                docker_client = docker.from_env()
+                break
+            except:
+                print("Docker client could not be initiated. Make sure Docker is running.")
+                continue
+        else:
+            break
+
+    if process_with_vadr=='y' and docker_client:
+        # pull latest docker image
+        docker_client.images.pull('staphb/vadr')
+
+        # run vadr
+        docker_container = docker_client.containers.run('staphb/vadr',
+            command = f'/bin/bash -c \
+                "/opt/vadr/vadr/miniscripts/fasta-trim-terminal-ambigs.pl \
+                    --minlen 50 --maxlen 30000 \
+                    /data/{os.path.basename(fasta_file)} > trimmed-genbank.fasta; \
+                v-annotate.pl --split --cpu 8 --glsearch -f -s -r \
+                    --noseqnamemax \
+                    --nomisc --mkey sarscov2 \
+                    --lowsim5seq 6 --lowsim3seq 6 \
+                    --alt_fail lowscore,insertnn,deletinn \
+                    --mdir /opt/vadr/vadr-models/ \
+                    /data/trimmed-genbank.fasta \
+                    /data/genbank"',
+            detach=True,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes= {output_batch_dir: {'bind': '/data', 'mode': 'rw'}}
+        )
+        docker_output = docker_container.attach(stdout=True, stream=True, logs=True);
+        for line in docker_output:
+            print(line.decode('utf-8'))
+
 
     LOG.debug("Completed.")

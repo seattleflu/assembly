@@ -14,6 +14,7 @@ import pandas as pd
 import conda.cli.python_api as Conda
 import docker
 from openpyxl import load_workbook
+from extract_sfs_identifiers import read_all_identifiers, find_sfs_identifiers
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
@@ -180,6 +181,14 @@ if __name__ == '__main__':
     shutil.rmtree(temp_dir)
 
     standardize_and_qc_external_metadata(args.metadata_file)
+
+    # create CSV of SFS sample barcodes
+    identifiers = read_all_identifiers(Path(output_batch_dir, 'external-metadata.xlsx'))
+    sfs_identifiers = find_sfs_identifiers(identifiers)
+
+    if sfs_identifiers is not None:
+        sfs_identifiers.to_csv(Path(output_batch_dir, 'sfs-sample-barcodes.csv'), index=False)
+
 
     process_with_nextclade = None
     while True:

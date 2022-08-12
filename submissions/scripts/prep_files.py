@@ -13,6 +13,7 @@ import logging
 import pandas as pd
 import conda.cli.python_api as Conda
 import docker
+from openpyxl import load_workbook
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
@@ -34,6 +35,85 @@ def count_s_occurrences(values):
         if isinstance(item, str) and item.lower().strip().startswith("s:"):
             count += 1
     return count
+
+def standardize_date(date_value):
+    if pd.isna(date_value) or (isinstance(date_value, str) and date_value.lower().strip() == 'na'):
+        return None
+    else:
+        # The minus sign before m and d removes leading zeros, to match the format of the original Excel file.
+        # Note: this may only work on unix, windows may need to use `#` instead of `-`
+        try:
+            return pd.to_datetime(date_value, format='%Y-%m-%d %H:%M:%S').strftime('%-m/%-d/%Y')
+        except:
+            raise Exception(f"Could not convert collection_date {date_value} to valid datetime.")
+
+def standardize_barcode(barcode):
+    if pd.isna(barcode):
+        return None
+    elif isinstance(barcode, str):
+        standardized_barcode = barcode.strip().lower()
+    elif isinstance(barcode, int):
+        standardized_barcode = str(barcode)
+    else:
+        raise TypeError(f"Barcodes must be type str or int. Invalid type {type(barcode)} on barcode: {barcode}")
+
+    if len(standardized_barcode) != 8:
+        raise ValueError(f"Invalid barcode with length {len(standardized_barcode)}: {standardized_barcode}")
+    else:
+        try:
+            int(standardized_barcode, 16) # this will fail if not a hexidecimal string
+        except:
+            raise ValueError(f"Barcodes must be hexidecimal. Invalid barcode: {standardized_barcode}.")
+        return standardized_barcode
+
+def validate_collection_dates(collection_dates):
+    cutoff_datetime = datetime(2022, 2, 1)
+
+    too_early_dates = collection_dates.dropna()[pd.to_datetime(collection_dates, format='%m/%d/%Y') < cutoff_datetime]
+
+    if not too_early_dates.empty:
+        raise Exception(f"Error: Collection date(s) earlier than {cutoff_datetime.strftime('%Y-%m-%d')}:\n {too_early_dates}")
+
+    if len(collection_dates.dropna().unique()) < 2:
+        raise Exception(f"Error: All collection dates values are the same:\n {collection_dates.unique()}")
+
+
+
+def standardize_and_qc_external_metadata(metadata_filename):
+    # Standardize and validate barcode and date values on external metadata Excel file. Loads 2 sheets to dataframes
+    # and writes them back to Excel if data passes all checks.
+
+    # Metadata sheet
+    external_metadata_metadata = pd.read_excel(metadata_filename, sheet_name='Metadata')
+    external_metadata_metadata['lab_accession_id'] = external_metadata_metadata['lab_accession_id'].apply(standardize_barcode)
+    external_metadata_metadata['collection_date'] = external_metadata_metadata['collection_date'].apply(standardize_date)
+    external_metadata_metadata['Seq date'] = external_metadata_metadata['Seq date'].apply(standardize_date)
+    # Samplify FC Data sheet
+    external_metadata_samplify_fc_data = pd.read_excel(args.metadata_file, sheet_name='Samplify FC Data', header=1)
+    external_metadata_samplify_fc_data['Investigator\'s sample ID'] = external_metadata_samplify_fc_data['Investigator\'s sample ID'].apply(standardize_barcode)
+    external_metadata_samplify_fc_data['Collection date'] = external_metadata_samplify_fc_data['Collection date'].apply(standardize_date)
+
+    # Only the collection date from the Metadata sheet is used for creating submission files.
+    # Validating to confirm no collection dates prior to Feb 2020 and not all dates are identical.
+    validate_collection_dates(external_metadata_metadata['collection_date'])
+
+    # The Samplify FC Data sheet has an extra row before the headers. Stashing this value to reinsert the row when writing back to Excel.
+    metadata_wb = load_workbook(args.metadata_file)
+    samplify_fc_data_a1 = metadata_wb['Samplify FC Data']['A1'].value
+
+    with pd.ExcelWriter(Path(output_batch_dir, 'external-metadata.xlsx'), engine='xlsxwriter', date_format='m/d/yyyy') as writer:
+        external_metadata_metadata.to_excel(writer, sheet_name='Metadata', index=False)
+        # put column headers on 2nd row of Samplify FC Data sheet, then populate first row with `samplify_fc_data_a1`` value
+        external_metadata_samplify_fc_data.to_excel(writer, sheet_name='Samplify FC Data', startrow = 1, index=False)
+        worksheet = writer.sheets['Samplify FC Data']
+        worksheet.write(0, 0, samplify_fc_data_a1)
+        # set format for Crt values to 2 decimals so whole numbers aren't displayed as integers (matching source file format)
+        format1 = writer.book.add_format({'num_format': '0.00'})
+        worksheet.set_column('O:O', None, format1)
+        writer.save()
+
+    LOG.debug(f"Saved external metadata file to {Path(output_batch_dir, 'external-metadata.xlsx')}")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -84,13 +164,6 @@ if __name__ == '__main__':
     assemby_results_file.extractall(fastq_dir)
     assemby_results_file.close()
 
-    LOG.debug("Copying/renaming metadata file to: external-metadata.xlsx")
-    shutil.copy(args.metadata_file, temp_dir)
-    original_metadata_filename = Path(args.metadata_file).name
-    metadata_file_path = Path(temp_dir, original_metadata_filename)
-    new_metadata_file_path = Path(batch_dir, 'external-metadata.xlsx')
-    os.rename(metadata_file_path, new_metadata_file_path)
-
     LOG.debug(f"Copying FASTA (.fa) and metrics (.tsv) file to: {batch_dir}")
     assembly_filename_stem = Path(args.results_file).stem
     fasta_file = Path(fastq_dir, assembly_filename_stem).with_suffix('.fa')
@@ -105,6 +178,8 @@ if __name__ == '__main__':
     LOG.debug(f"Output folders created and populated: {output_batch_dir}, {output_fastq_dir}")
     LOG.debug(f"Deleting temp directory {temp_dir}")
     shutil.rmtree(temp_dir)
+
+    standardize_and_qc_external_metadata(args.metadata_file)
 
     process_with_nextclade = None
     while True:

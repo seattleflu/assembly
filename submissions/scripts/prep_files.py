@@ -3,6 +3,7 @@ Prepares files and directories for sequencing submissions.
 
 """
 import os
+import re
 import shutil
 import argparse
 import tarfile
@@ -58,14 +59,14 @@ def standardize_barcode(barcode):
     else:
         raise TypeError(f"Barcodes must be type str or int. Invalid type {type(barcode)} on barcode: {barcode}")
 
-    if len(standardized_barcode) != 8:
-        raise ValueError(f"Invalid barcode with length {len(standardized_barcode)}: {standardized_barcode}")
-    else:
-        try:
-            int(standardized_barcode, 16) # this will fail if not a hexidecimal string
-        except:
-            raise ValueError(f"Barcodes must be hexidecimal. Invalid barcode: {standardized_barcode}.")
+    # In addition to standard format, allow barcodes ending in `_exp` which typically don't need to be submitted
+    # but should be confirmed with sequencing team before dropping.
+    if (bool(re.match('^[0-9a-f]{8}$', standardized_barcode)) or
+        bool(re.match('^[0-9a-f]{8}_exp$', standardized_barcode)) or
+        standardized_barcode in ["twist positive", "blank"]):
         return standardized_barcode
+    else:
+        raise ValueError(f"Identifiers must be hexidecimal barcodes, `blank`, or `twist positive`. Invalid barcode: {standardized_barcode}")
 
 def validate_collection_dates(collection_dates):
     cutoff_datetime = datetime(2022, 2, 1)
@@ -97,6 +98,25 @@ def standardize_and_qc_external_metadata(metadata_filename):
     # Only the collection date from the Metadata sheet is used for creating submission files.
     # Validating to confirm no collection dates prior to Feb 2020 and not all dates are identical.
     validate_collection_dates(external_metadata_metadata['collection_date'])
+
+    # Identify and optionally remove expirimental samples
+    exp_samples = external_metadata_metadata[external_metadata_metadata['lab_accession_id'].str.endswith('_exp', na=False)]
+    exp_samples_samplify = external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].str.endswith('_exp', na=False)]
+    if not exp_samples.empty:
+        print(f"Expirimental samples found: {len(exp_samples)}\n {exp_samples.to_string()}")
+
+    drop_expirimental_samples = None
+    while True:
+        drop_expirimental_samples = input("Drop expirimental samples? (y/n)").lower()
+        if drop_expirimental_samples not in ['y','n']:
+            print("Not a valid response")
+            continue
+        else:
+            break
+
+    if drop_expirimental_samples == 'y':
+        external_metadata_metadata.drop(exp_samples.index, inplace=True)
+        external_metadata_samplify_fc_data.drop(exp_samples_samplify.index, inplace=True)
 
     # The Samplify FC Data sheet has an extra row before the headers. Stashing this value to reinsert the row when writing back to Excel.
     metadata_wb = load_workbook(args.metadata_file)
@@ -242,14 +262,14 @@ if __name__ == '__main__':
         excluded_vocs = nextclade_df[
                 (nextclade_df["errors"].notnull()) |
                 (nextclade_df["clade"].isin(["19A","19B","recombinant"])) |
-                ("S" in nextclade_df["failedGenes"].str.split(",")) |
+                ("S" in nextclade_df["failedGenes"].astype(str).str.split(",")) |
                 (nextclade_df["aaChanges_s_total"] < 3) |
                 (nextclade_df["qc.frameShifts.frameShifts"].str.split(",").apply(count_s_occurrences) > 0)]
 
         metadata = pd.read_excel(args.metadata_file)
 
         # remove twist positives from excluded VOCs
-        twist_positives = metadata[metadata["Project"].str.lower()=="twist positive"]
+        twist_positives = metadata[metadata["lab_accession_id"].str.lower()=="twist positive"]
         excluded_vocs=pd.merge(excluded_vocs, twist_positives, on=["LIMS"], how="outer", indicator=True)
         excluded_vocs=excluded_vocs[excluded_vocs["_merge"]=="left_only"]
 

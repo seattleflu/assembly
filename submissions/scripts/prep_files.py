@@ -4,6 +4,7 @@ Prepares files and directories for sequencing submissions.
 """
 import os
 import re
+import sys
 import shutil
 import argparse
 import tarfile
@@ -28,6 +29,22 @@ logging.captureWarnings(True)
 
 LOG = logging.getLogger(__name__)
 LOG.setLevel(LOG_LEVEL)
+
+def yes_no_cancel(message):
+    while True:
+        user_input = input(f"{message} [y]es/[n]o/[c]ancel: ").lower()
+        if user_input not in ['y','n','c']:
+            print("Not a valid response")
+            continue
+        else:
+            break
+    if user_input == 'y':
+        return True
+    elif user_input == 'n':
+        return False
+    else:
+        print("Cancelling.")
+        sys.exit()
 
 def count_s_occurrences(values):
     count = 0
@@ -105,18 +122,9 @@ def standardize_and_qc_external_metadata(metadata_filename):
     if not exp_samples.empty:
         print(f"Expirimental samples found: {len(exp_samples)}\n {exp_samples.to_string()}")
 
-    drop_expirimental_samples = None
-    while True:
-        drop_expirimental_samples = input("Drop expirimental samples? (y/n)").lower()
-        if drop_expirimental_samples not in ['y','n']:
-            print("Not a valid response")
-            continue
-        else:
-            break
-
-    if drop_expirimental_samples == 'y':
-        external_metadata_metadata.drop(exp_samples.index, inplace=True)
-        external_metadata_samplify_fc_data.drop(exp_samples_samplify.index, inplace=True)
+        if yes_no_cancel("Drop expirimental samples?"):
+            external_metadata_metadata.drop(exp_samples.index, inplace=True)
+            external_metadata_samplify_fc_data.drop(exp_samples_samplify.index, inplace=True)
 
     # Identify and optionally remove cascadia samples
     cascadia_samples = external_metadata_metadata[external_metadata_metadata['county'].str.lower().str.strip() == 'cascadia']
@@ -124,18 +132,9 @@ def standardize_and_qc_external_metadata(metadata_filename):
     if not exp_samples.empty or not cascadia_samples_samplify.empty:
         print(f"Cascadia samples found:\n {exp_samples.to_string()} \n {cascadia_samples_samplify.to_string()}")
 
-    drop_cascadia_samples = None
-    while True:
-        drop_cascadia_samples = input("Drop Cascadia samples? (y/n)").lower()
-        if drop_cascadia_samples not in ['y','n']:
-            print("Not a valid response")
-            continue
-        else:
-            break
-
-    if drop_cascadia_samples == 'y':
-        external_metadata_metadata.drop(cascadia_samples.index, inplace=True)
-        external_metadata_samplify_fc_data.drop(cascadia_samples_samplify.index, inplace=True)
+        if yes_no_cancel("Drop Cascadia samples?"):
+            external_metadata_metadata.drop(cascadia_samples.index, inplace=True)
+            external_metadata_samplify_fc_data.drop(cascadia_samples_samplify.index, inplace=True)
 
     # The Samplify FC Data sheet has an extra row before the headers. Stashing this value to reinsert the row when writing back to Excel.
     metadata_wb = load_workbook(args.metadata_file)
@@ -228,17 +227,7 @@ if __name__ == '__main__':
     if sfs_identifiers is not None:
         sfs_identifiers.to_csv(Path(output_batch_dir, 'sfs-sample-barcodes.csv'), index=False)
 
-
-    process_with_nextclade = None
-    while True:
-        process_with_nextclade = input("Process with NextClade? (y/n)").lower()
-        if process_with_nextclade not in ['y','n']:
-            print("Not a valid response")
-            continue
-        else:
-            break
-
-    if process_with_nextclade == 'y':
+    if yes_no_cancel("Process with NextClade?"):
         LOG.debug("Pulling data from NextClade")
 
         # Get data files from NextClade
@@ -302,11 +291,8 @@ if __name__ == '__main__':
     process_with_vadr = None
     docker_client = None
     while True:
-        process_with_vadr = input("Process with VADR? (y/n)").lower()
-        if process_with_vadr not in ['y','n']:
-            print("Not a valid response")
-            continue
-        elif process_with_vadr == 'y':
+        process_with_vadr = yes_no_cancel("Process with VADR? (y/n)")
+        if process_with_vadr:
             try:
                 docker_client = docker.from_env()
                 break
@@ -316,7 +302,7 @@ if __name__ == '__main__':
         else:
             break
 
-    if process_with_vadr=='y' and docker_client:
+    if process_with_vadr and docker_client:
         # pull latest docker image
         docker_client.images.pull('staphb/vadr')
 

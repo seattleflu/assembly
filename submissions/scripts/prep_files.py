@@ -118,6 +118,25 @@ def standardize_and_qc_external_metadata(metadata_filename):
         external_metadata_metadata.drop(exp_samples.index, inplace=True)
         external_metadata_samplify_fc_data.drop(exp_samples_samplify.index, inplace=True)
 
+    # Identify and optionally remove cascadia samples
+    cascadia_samples = external_metadata_metadata[external_metadata_metadata['county'].str.lower().str.strip() == 'cascadia']
+    cascadia_samples_samplify = external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Origin'].str.lower().str.strip() == 'cascadia']
+    if not exp_samples.empty or not cascadia_samples_samplify.empty:
+        print(f"Cascadia samples found:\n {exp_samples.to_string()} \n {cascadia_samples_samplify.to_string()}")
+
+    drop_cascadia_samples = None
+    while True:
+        drop_cascadia_samples = input("Drop Cascadia samples? (y/n)").lower()
+        if drop_cascadia_samples not in ['y','n']:
+            print("Not a valid response")
+            continue
+        else:
+            break
+
+    if drop_cascadia_samples == 'y':
+        external_metadata_metadata.drop(cascadia_samples.index, inplace=True)
+        external_metadata_samplify_fc_data.drop(cascadia_samples_samplify.index, inplace=True)
+
     # The Samplify FC Data sheet has an extra row before the headers. Stashing this value to reinsert the row when writing back to Excel.
     metadata_wb = load_workbook(args.metadata_file)
     samplify_fc_data_a1 = metadata_wb['Samplify FC Data']['A1'].value

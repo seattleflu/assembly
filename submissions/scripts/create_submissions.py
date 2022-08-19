@@ -24,7 +24,7 @@ from Bio import SeqIO
 
 
 base_dir = Path(__file__).resolve().parent.parent.parent
-SUBMISSION_GROUPS = ['scan', 'sfs', 'wa-doh']
+SUBMISSION_GROUPS = ['scan', 'sfs', 'wa-doh', 'cascadia']
 SFS = 'Seattle Flu Study'
 IDENTIFIER_COLUMNS = [
     'nwgc_id',
@@ -118,8 +118,9 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None) -> pd.Dat
         id3c_metadata['sequence_reason'] = id3c_metadata['sequence_reason'].fillna(value='Sentinel surveillance')
         id3c_metadata['originating_lab'] = 'Seattle Flu Study'
         id3c_metadata['submission_group'] = 'sfs'
-        # Label SCAN samples separately since they have different authors than SFS samples
-        id3c_metadata.loc[id3c_metadata['source'] == 'SCAN', 'submission_group'] = 'scan'
+        # Label SCAN and Cascadia samples separately since they have different authors than SFS samples
+        id3c_metadata.loc[id3c_metadata['source'].str.lower().str.strip() == 'scan', 'submission_group'] = 'scan'
+        id3c_metadata.loc[id3c_metadata['source'].str.lower().str.strip() == 'cascadia', 'submission_group'] = 'cascadia'
 
         # Drop rows with nwgc_id in the ID3C metadata file
         # Ensures there are no duplicate rows in the final metadata DF

@@ -5,12 +5,10 @@ Prepares files and directories for sequencing submissions.
 import os
 import re
 import sys
-import shutil
 import argparse
 import tarfile
 from pathlib import Path
 from datetime import datetime
-import tempfile
 import logging
 import pandas as pd
 import conda.cli.python_api as Conda
@@ -175,48 +173,20 @@ if __name__ == '__main__':
     except ValueError:
         raise ValueError("Incorrect date format, should be YYYYMMDD")
 
-    temp_dir = tempfile.mkdtemp(prefix='submissions_')
-    LOG.debug(f"Created temp directory: {temp_dir}")
-
     batch_dir_name = 'Batch-' + args.batch_date
-    fastq_dir_name = args.batch_date + '_fastq'
 
-    # check that output directories don't already exist
+    # check that output directory doesn't already exist
     output_batch_dir = Path(args.output_dir, batch_dir_name)
-    output_fastq_dir = Path(args.output_dir, fastq_dir_name)
     if os.path.isdir(output_batch_dir):
         raise FileExistsError(f"Output batch folder already exists: {output_batch_dir}. Aborting.")
-    elif os.path.isdir(output_fastq_dir):
-        raise FileExistsError(f"Output fastq folder already exists: {output_fastq_dir}. Aborting.")
-
-
-    # create subdirectories
-    batch_dir = Path(temp_dir, batch_dir_name)
-    fastq_dir = Path(temp_dir, fastq_dir_name)
-    LOG.debug(f"Creating subdirectories: {os.path.basename(batch_dir)}, {os.path.basename(fastq_dir)}")
-    os.mkdir(batch_dir)
-    os.mkdir(fastq_dir)
+    else:
+        output_batch_dir.mkdir(parents=True, exist_ok=True)
 
     # extract assembly results to temp fastq directory
-    LOG.debug(f"Extracting compressed results file (.tar.gz) to: {fastq_dir}")
+    LOG.debug(f"Extracting compressed results file (.tar.gz) to: {output_batch_dir}")
     assemby_results_file = tarfile.open(args.results_file)
-    assemby_results_file.extractall(fastq_dir)
+    assemby_results_file.extractall(output_batch_dir)
     assemby_results_file.close()
-
-    LOG.debug(f"Copying FASTA (.fa) and metrics (.tsv) file to: {batch_dir}")
-    assembly_filename_stem = Path(args.results_file).stem
-    fasta_file = Path(fastq_dir, assembly_filename_stem).with_suffix('.fa')
-    metrics_file = Path(fastq_dir, assembly_filename_stem).with_suffix('.metrics.tsv')
-    shutil.copy(fasta_file, batch_dir)
-    shutil.copy(metrics_file, batch_dir)
-
-    # copy contents of temp_dir to output_dir
-    shutil.copytree(batch_dir, output_batch_dir)
-    shutil.copytree(fastq_dir, output_fastq_dir)
-
-    LOG.debug(f"Output folders created and populated: {output_batch_dir}, {output_fastq_dir}")
-    LOG.debug(f"Deleting temp directory {temp_dir}")
-    shutil.rmtree(temp_dir)
 
     standardize_and_qc_external_metadata(args.metadata_file)
 
@@ -243,7 +213,7 @@ if __name__ == '__main__':
 
 
         LOG.debug("Analyzing FASTA file with NextClade.")
-        fasta_file = Path(output_batch_dir, assembly_filename_stem).with_suffix('.fa')
+        fasta_file = Path(output_batch_dir, Path(args.results_file).stem).with_suffix('.fa')
         nextclade_output = Path(output_batch_dir,'nextclade.tsv')
         result = Conda.run_command('run', 'nextclade', 'run',
             f"--input-dataset={output_batch_dir}/data/sars-cov-2",

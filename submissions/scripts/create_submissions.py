@@ -876,6 +876,9 @@ if __name__ == '__main__':
     # Only create submissions for sequences that have status "submitted"
     submit_metadata = metadata.loc[metadata['status'] == 'submitted']
 
+    if submit_metadata.empty:
+        sys.exit(f"No new submissions:\n {metadata.groupby(['status'])['status'].count()}")
+
     create_gisaid_submission(submit_metadata, args.fasta, output_dir, batch_name, args.gisaid_username)
 
     # Only create NCBI submissions for sequences that passed VADR

@@ -15,6 +15,8 @@ import conda.cli.python_api as Conda
 import docker
 from openpyxl import load_workbook
 from extract_sfs_identifiers import read_all_identifiers, find_sfs_identifiers
+import requests
+import getpass
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
@@ -238,6 +240,35 @@ if __name__ == '__main__':
                         sys.exit()
                     else:
                         break
+
+    while True:
+        if yes_no_cancel("Pull previous submissions file from Github?"):
+            tsv_url = "https://raw.github.com/seattleflu/hcov19-sequence-identifiers/master/hcov19-sequence-identifiers.tsv"
+            LOG.debug(f"Downloading {tsv_url}")
+
+            token = os.environ.get('GH_ACCESS_TOKEN') or getpass.getpass('Github Personal access token:')
+            try:
+                r = requests.get('https://api.github.com/repos/seattleflu/hcov19-sequence-identifiers/contents/hcov19-sequence-identifiers.tsv',
+                    headers={
+                        'accept': 'application/vnd.github.v3.raw',
+                        'authorization': 'token {}'.format(token)
+                    }
+                )
+
+                if r.status_code == 200:
+                    with open(Path(output_batch_dir, 'previous-submissions.tsv'), 'w') as f:
+                        f.write(r.text)
+                    break
+                else:
+                    LOG.warning(f"Error downloading previous submissions file: {r.status_code}")
+                    continue
+
+            except requests.exceptions.HTTPError as e:
+                LOG.warning(f"Error: {e.response.text}")
+                continue
+        else:
+            break
+
 
     if yes_no_cancel("Process with NextClade?"):
         LOG.debug("Pulling data from NextClade")

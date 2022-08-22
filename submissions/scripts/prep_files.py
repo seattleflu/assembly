@@ -195,7 +195,49 @@ if __name__ == '__main__':
     sfs_identifiers = find_sfs_identifiers(identifiers)
 
     if sfs_identifiers is not None:
-        sfs_identifiers.to_csv(Path(output_batch_dir, 'sfs-sample-barcodes.csv'), index=False)
+        id3c_metadata_csv = Path(output_batch_dir, 'sfs-sample-barcodes.csv')
+        sfs_identifiers.to_csv(id3c_metadata_csv, index=False)
+        LOG.debug(f"Saved {len(sfs_identifiers)} SFS identifiers to {id3c_metadata_csv}.")
+
+        if yes_no_cancel("Pull metadata from ID3C?"):
+            LOG.debug("Pulling metadata from ID3C")
+
+            # Get data files from NextClade
+            id3c_metadata_with_county_csv = Path(output_batch_dir, 'id3c_metadata_with_county.csv')
+
+            # The `export_id3c_metadata` bash script is in the same location as current script
+            export_id3c_metadata_script = Path(Path(__file__).resolve().parent, "export_id3c_metadata")
+
+            # Temporarily point stdout to a file while running this script, then point it back
+            stdout = sys.stdout
+            with open(id3c_metadata_with_county_csv, 'w') as sys.stdout:
+                result = Conda.run_command('run', f"{export_id3c_metadata_script}",
+                    f"{id3c_metadata_csv}",
+                    stdout="STDOUT",
+                    stderr="STDERR"
+                )
+            sys.stdout = stdout
+
+            if result and len(result)==3 and result[2] == 0 and id3c_metadata_with_county_csv.exists() and id3c_metadata_with_county_csv.stat().st_size > 0:
+                LOG.debug(f"Successfully saved ID3C metadata to {id3c_metadata_with_county_csv}")
+            else:
+                raise Exception(f"Error pulling metadata from ID3C.\n {result}")
+
+            # Check for SFS samples with missing collection date
+            id3c_metadata_df = pd.read_csv(id3c_metadata_with_county_csv)
+            sfs_missing_date = id3c_metadata_df[(id3c_metadata_df['source']=='SFS')&(id3c_metadata_df['collection_date'].isna())]
+
+            if not sfs_missing_date.empty:
+                LOG.debug(f"Warning: {len(sfs_missing_date)} SFS samples missing collection date:\n {sfs_missing_date}")
+                while True:
+                    user_input = input(f"Continue preparing files? [y]es/[n]o: ").lower()
+                    if user_input not in ['y','n']:
+                        print("Not a valid response")
+                        continue
+                    elif user_input == 'n':
+                        sys.exit()
+                    else:
+                        break
 
     if yes_no_cancel("Process with NextClade?"):
         LOG.debug("Pulling data from NextClade")

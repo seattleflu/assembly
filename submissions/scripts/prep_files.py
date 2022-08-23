@@ -116,6 +116,25 @@ def standardize_and_qc_external_metadata(metadata_filename):
     # Validating to confirm no collection dates prior to Feb 2020 and not all dates are identical.
     validate_collection_dates(external_metadata_metadata['collection_date'])
 
+    # all records with barcodes should be present in both sheets
+    non_matching_ids = pd.merge(external_metadata_metadata[~external_metadata_metadata["lab_accession_id"].isin(['blank', 'twist positive'])],
+        external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].notna()],
+        how="outer",
+        left_on=["LIMS", "lab_accession_id"],
+        right_on=["Sample ID", "Investigator\'s sample ID"],
+        indicator=True).query("_merge != 'both'")[['LIMS', 'lab_accession_id', 'Sample ID',  'Investigator\'s sample ID']]
+
+    # for blanks and twist positives, the sample IDs should present on both sheets, but with empty `Investigator's sample ID` on Samplify FC Data sheet.
+    non_matching_blank_twist_pos = pd.merge(external_metadata_metadata[external_metadata_metadata["lab_accession_id"].isin(['blank', 'twist positive'])],
+        external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].isna()],
+        how="outer",
+        left_on=["LIMS"],
+        right_on=["Sample ID"],
+        indicator=True).query("_merge != 'both'")[['LIMS', 'lab_accession_id', 'Sample ID',  'Investigator\'s sample ID']]
+
+    assert len(non_matching_ids) == 0, f"Error: Non-matching IDs found in metadata file:\n {non_matching_ids}"
+    assert len(non_matching_blank_twist_pos) == 0, f"Error: Non-matching blanks and/or twist positives found in metadata file:\n{non_matching_blank_twist_pos}"
+
     # Identify and optionally remove expirimental samples
     exp_samples = external_metadata_metadata[external_metadata_metadata['lab_accession_id'].str.endswith('_exp', na=False)]
     exp_samples_samplify = external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].str.endswith('_exp', na=False)]

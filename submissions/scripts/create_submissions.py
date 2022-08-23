@@ -394,16 +394,18 @@ def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
 
     Samples listed in the provided *exclude_vocs* are excluded from VoC reports
     """
-    vocs = pd.read_csv(base_dir / 'submissions/source-data/variants_of_concern.tsv', sep='\t')
+    vocs = pd.read_csv(base_dir / 'submissions/source-data/variants_of_concern.tsv', sep='\t').rename(columns={'pangolin': 'clade_pangolin'})
+    # Concatenate pangolin values for each clade. WHO values should be same per clade, so concatenate and remove duplicates
+    vocs = vocs.groupby(['clade'], as_index = False).agg({'clade_pangolin': ', '.join, 'who': lambda x:', '.join(set(x))})
     exclude_ids = text_to_list(excluded_vocs)
 
-    voc_samples = metadata.loc[(metadata['pangolin'].isin(vocs['pangolin'])) & (~metadata['nwgc_id'].isin(exclude_ids))]
-    voc_samples = voc_samples.merge(vocs, on=['pangolin'], how='inner')
+    voc_samples = metadata.loc[(metadata['clade'].isin(vocs['clade'])) & (~metadata['nwgc_id'].isin(exclude_ids))]
+    voc_samples = voc_samples.merge(vocs, on=['clade'], how='inner')
 
-    all_vocs_counts = voc_samples.groupby(['who', 'pangolin']).size().reset_index(name='counts')
+    all_vocs_counts = voc_samples.groupby(['clade', 'clade_pangolin', 'who']).size().reset_index(name='counts')
     all_vocs_counts.to_csv(output_dir / f'{batch_name}_total_vocs.csv', index=False)
 
-    voc_report_columns = ['who', 'pangolin', 'collection_date', 'sfs_sample_barcode', 'sfs_collection_barcode']
+    voc_report_columns = ['who', 'clade', 'clade_pangolin', 'pangolin', 'collection_date', 'sfs_sample_barcode', 'sfs_collection_barcode']
     sfs_vocs = voc_samples.loc[voc_samples['originating_lab'] == 'Seattle Flu Study']
     sfs_sources = sfs_vocs['source'].unique()
 

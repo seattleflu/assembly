@@ -159,7 +159,7 @@ def standardize_and_qc_external_metadata(metadata_filename):
     metadata_wb = load_workbook(args.metadata_file)
     samplify_fc_data_a1 = metadata_wb['Samplify FC Data']['A1'].value
 
-    with pd.ExcelWriter(Path(output_batch_dir, 'external-metadata.xlsx'), engine='xlsxwriter', date_format='m/d/yyyy') as writer:
+    with pd.ExcelWriter(OUTPUT_PATHS['metadata'], engine='xlsxwriter', date_format='m/d/yyyy') as writer:
         external_metadata_metadata.to_excel(writer, sheet_name='Metadata', index=False)
         # put column headers on 2nd row of Samplify FC Data sheet, then populate first row with `samplify_fc_data_a1`` value
         external_metadata_samplify_fc_data.to_excel(writer, sheet_name='Samplify FC Data', startrow = 1, index=False)
@@ -170,7 +170,7 @@ def standardize_and_qc_external_metadata(metadata_filename):
         worksheet.set_column('O:O', None, format1)
         writer.save()
 
-    LOG.debug(f"Saved external metadata file to {Path(output_batch_dir, 'external-metadata.xlsx')}")
+    LOG.debug(f"Saved external metadata file to {OUTPUT_PATHS['metadata']}")
 
 
 if __name__ == '__main__':
@@ -203,6 +203,20 @@ if __name__ == '__main__':
     else:
         output_batch_dir.mkdir(parents=True, exist_ok=True)
 
+    OUTPUT_PATHS = {
+        'metadata': Path(output_batch_dir, 'external-metadata.xlsx'),
+        'id3c-metadata': Path(output_batch_dir, 'id3c-metadata-with-county.csv'),
+        'metrics': Path(output_batch_dir, Path(args.results_file).stem).with_suffix('.metrics.tsv'),
+        'nextclade': Path(output_batch_dir,'nextclade.tsv'),
+        'previous-submissions': Path(output_batch_dir, 'previous-submissions.tsv'),
+        'fasta': Path(output_batch_dir, Path(args.results_file).stem).with_suffix('.fa'),
+        'excluded-vocs': Path(output_batch_dir, 'excluded-vocs.txt'),
+        'vadr-dir': Path(output_batch_dir, 'genbank'), #this one is a folder
+
+        'sfs-sample-barcodes': Path(output_batch_dir, 'sfs-sample-barcodes.csv'),
+        'nextclade-sars-cov-2': Path(output_batch_dir, 'data/sars-cov-2'),
+    }
+
     # extract assembly results to temp fastq directory
     LOG.debug(f"Extracting compressed results file (.tar.gz) to: {output_batch_dir}")
     assemby_results_file = tarfile.open(args.results_file)
@@ -212,40 +226,36 @@ if __name__ == '__main__':
     standardize_and_qc_external_metadata(args.metadata_file)
 
     # create CSV of SFS sample barcodes
-    identifiers = read_all_identifiers(Path(output_batch_dir, 'external-metadata.xlsx'))
+    identifiers = read_all_identifiers(OUTPUT_PATHS['metadata'])
     sfs_identifiers = find_sfs_identifiers(identifiers)
 
     if sfs_identifiers is not None:
-        id3c_metadata_csv = Path(output_batch_dir, 'sfs-sample-barcodes.csv')
-        sfs_identifiers.to_csv(id3c_metadata_csv, index=False)
-        LOG.debug(f"Saved {len(sfs_identifiers)} SFS identifiers to {id3c_metadata_csv}.")
+        sfs_identifiers.to_csv(OUTPUT_PATHS['sfs-sample-barcodes'], index=False)
+        LOG.debug(f"Saved {len(sfs_identifiers)} SFS identifiers to {OUTPUT_PATHS['id3c-metadata']}.")
 
         if yes_no_cancel("Pull metadata from ID3C?"):
             LOG.debug("Pulling metadata from ID3C")
-
-            # Get data files from NextClade
-            id3c_metadata_with_county_csv = Path(output_batch_dir, 'id3c_metadata_with_county.csv')
 
             # The `export_id3c_metadata` bash script is in the same location as current script
             export_id3c_metadata_script = Path(Path(__file__).resolve().parent, "export_id3c_metadata")
 
             # Temporarily point stdout to a file while running this script, then point it back
             stdout = sys.stdout
-            with open(id3c_metadata_with_county_csv, 'w') as sys.stdout:
+            with open(OUTPUT_PATHS['id3c-metadata'], 'w') as sys.stdout:
                 result = Conda.run_command('run', f"{export_id3c_metadata_script}",
-                    f"{id3c_metadata_csv}",
+                    f"{OUTPUT_PATHS['sfs-sample-barcodes']}",
                     stdout="STDOUT",
                     stderr="STDERR"
                 )
             sys.stdout = stdout
 
-            if result and len(result)==3 and result[2] == 0 and id3c_metadata_with_county_csv.exists() and id3c_metadata_with_county_csv.stat().st_size > 0:
-                LOG.debug(f"Successfully saved ID3C metadata to {id3c_metadata_with_county_csv}")
+            if result and len(result)==3 and result[2] == 0 and OUTPUT_PATHS['id3c-metadata'].exists() and OUTPUT_PATHS['id3c-metadata'].stat().st_size > 0:
+                LOG.debug(f"Successfully saved ID3C metadata to {OUTPUT_PATHS['id3c-metadata']}")
             else:
                 raise Exception(f"Error pulling metadata from ID3C.\n {result}")
 
             # Check for SFS samples with missing collection date
-            id3c_metadata_df = pd.read_csv(id3c_metadata_with_county_csv)
+            id3c_metadata_df = pd.read_csv(OUTPUT_PATHS['id3c-metadata'])
             sfs_missing_date = id3c_metadata_df[(id3c_metadata_df['source']=='SFS')&(id3c_metadata_df['collection_date'].isna())]
 
             if not sfs_missing_date.empty:
@@ -275,7 +285,7 @@ if __name__ == '__main__':
                 )
 
                 if r.status_code == 200:
-                    with open(Path(output_batch_dir, 'previous-submissions.tsv'), 'w') as f:
+                    with open(OUTPUT_PATHS['previous-submissions'], 'w') as f:
                         f.write(r.text)
                     break
                 else:
@@ -295,7 +305,7 @@ if __name__ == '__main__':
         # Get data files from NextClade
         result = Conda.run_command('run', 'nextclade', 'dataset', 'get',
             "--name=sars-cov-2",
-            f"--output-dir={output_batch_dir}/data/sars-cov-2"
+            f"--output-dir={OUTPUT_PATHS['nextclade-sars-cov-2']}"
         )
 
         if result and len(result)==3 and result[2] == 0:
@@ -305,20 +315,18 @@ if __name__ == '__main__':
 
 
         LOG.debug("Analyzing FASTA file with NextClade.")
-        fasta_file = Path(output_batch_dir, Path(args.results_file).stem).with_suffix('.fa')
-        nextclade_output = Path(output_batch_dir,'nextclade.tsv')
         result = Conda.run_command('run', 'nextclade', 'run',
-            f"--input-dataset={output_batch_dir}/data/sars-cov-2",
-            f"--output-tsv={nextclade_output}",
-            f"{fasta_file}"
+            f"--input-dataset={OUTPUT_PATHS['nextclade-sars-cov-2']}",
+            f"--output-tsv={OUTPUT_PATHS['nextclade']}",
+            f"{OUTPUT_PATHS['fasta']}"
         )
         if result[2] == 0:
-           LOG.debug(f"NextClade processing complete: {nextclade_output}")
+           LOG.debug(f"NextClade processing complete: {OUTPUT_PATHS['nextclade']}")
         else:
-           raise Exception(f"Error: NextClade processing of {fasta_file} failed:\n {result}")
+           raise Exception(f"Error: NextClade processing of {OUTPUT_PATHS['fasta']} failed:\n {result}")
 
         #load nextclade.txv to dataframe
-        nextclade_df = pd.read_csv(nextclade_output, sep="\t")
+        nextclade_df = pd.read_csv(OUTPUT_PATHS['nextclade'], sep="\t")
 
         nextclade_df["LIMS"] = nextclade_df["seqName"].str.extract("^[^\d]*(\d+)").astype(int)
 
@@ -345,8 +353,8 @@ if __name__ == '__main__':
 
         LOG.debug(f'Excluded VOCs:{excluded_vocs[["LIMS", "seqName", "clade", "qc.missingData.status", "aaChanges_s_total", "qc.frameShifts.frameShifts", "failedGenes", "errors"]]}')
 
-        excluded_vocs[['LIMS']].to_csv(Path(output_batch_dir, 'excluded-vocs.txt'), header=False, index=False)
-        LOG.debug(f"Saved {len(excluded_vocs)} NWGC ids to {Path(output_batch_dir, 'excluded-vocs.txt')}.")
+        excluded_vocs[['LIMS']].to_csv(OUTPUT_PATHS['excluded-vocs'], header=False, index=False)
+        LOG.debug(f"Saved {len(excluded_vocs)} NWGC ids to {OUTPUT_PATHS['excluded-vocs']}.")
 
 
     # process with VADR
@@ -373,7 +381,7 @@ if __name__ == '__main__':
             command = f'/bin/bash -c \
                 "/opt/vadr/vadr/miniscripts/fasta-trim-terminal-ambigs.pl \
                     --minlen 50 --maxlen 30000 \
-                    /data/{os.path.basename(fasta_file)} > trimmed-genbank.fasta; \
+                    /data/{OUTPUT_PATHS["fasta"].name} > trimmed-genbank.fasta; \
                 v-annotate.pl --split --cpu 8 --glsearch -f -s -r \
                     --noseqnamemax \
                     --nomisc --mkey sarscov2 \
@@ -392,4 +400,27 @@ if __name__ == '__main__':
             print(line.decode('utf-8'))
 
 
-    LOG.debug("Completed.")
+    print("Completed file prep.\n\n")
+
+    if all([x.exists() for x in OUTPUT_PATHS.values()]):
+        # create_submissions script is in the same folder as current script
+        create_submissions_script = Path(Path(__file__).resolve().parent, "create_submissions.py")
+
+        print("Review outputs, then run this command to create submissions:\n\n"
+            f"python3 {create_submissions_script} \\\n"
+            f"--batch-name {args.batch_date} \\\n"
+            f"--metadata {OUTPUT_PATHS['metadata']} \\\n"
+            f"--id3c-metadata {OUTPUT_PATHS['id3c-metadata']} \\\n"
+            f"--fasta {OUTPUT_PATHS['fasta']} \\\n"
+            f"--metrics {OUTPUT_PATHS['metrics']} \\\n"
+            f"--nextclade {OUTPUT_PATHS['nextclade']} \\\n"
+            f"--previous-submissions {OUTPUT_PATHS['previous-submissions']} \\\n"
+            f"--excluded-vocs {OUTPUT_PATHS['excluded-vocs']} \\\n"
+            f"--vadr-dir {OUTPUT_PATHS['vadr-dir']} \\\n"
+            f"--output-dir {output_batch_dir} \\\n"
+            f"--gisaid-username <your username> \\\n"
+            f"--strain-id <next strain id> \\\n"
+        )
+    else:
+        print("Warning: Missing required inputs to create submissions:")
+        print('\n'.join([str(x) for x in OUTPUT_PATHS.values() if not x.exists()]))

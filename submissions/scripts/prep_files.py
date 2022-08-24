@@ -66,6 +66,7 @@ def standardize_date(date_value):
         except:
             raise Exception(f"Could not convert collection_date {date_value} to valid datetime.")
 
+
 def standardize_barcode(barcode):
     if pd.isna(barcode):
         return None
@@ -402,6 +403,10 @@ if __name__ == '__main__':
 
     print("Completed file prep.\n\n")
 
+    previous_submissions = pd.read_csv(OUTPUT_PATHS['previous-submissions'], sep='\t')
+    valid_gisaid_ids = previous_submissions[previous_submissions['strain_name'].str.contains('USA/[A-Z]{2}-S\d*/\d{4}', na=False)][['strain_name']]
+    next_avail_strain_id = valid_gisaid_ids['strain_name'].apply( lambda x: x[x.find("-S")+2 : x.find("/",x.find("-S"))]).astype(int).max() + 1
+
     if all([x.exists() for x in OUTPUT_PATHS.values()]):
         # create_submissions script is in the same folder as current script
         create_submissions_script = Path(Path(__file__).resolve().parent, "create_submissions.py")
@@ -418,8 +423,8 @@ if __name__ == '__main__':
             f"--excluded-vocs {OUTPUT_PATHS['excluded-vocs']} \\\n"
             f"--vadr-dir {OUTPUT_PATHS['vadr-dir']} \\\n"
             f"--output-dir {output_batch_dir} \\\n"
-            f"--gisaid-username <your username> \\\n"
-            f"--strain-id <next strain id> \\\n"
+            f"--strain-id {next_avail_strain_id} \\\n"
+            f"--gisaid-username <your username> \n"
         )
     else:
         print("Warning: Missing required inputs to create submissions:")

@@ -59,12 +59,16 @@ def standardize_date(date_value):
     if pd.isna(date_value) or (isinstance(date_value, str) and date_value.lower().strip() == 'na'):
         return None
     else:
+        # So far, two date formats have been encountered in metadata Excel files, resulting in different formats in
+        # resulting dataframes. If `date_value` does not match either of these formats, a ValueError exception will be
+        # thrown. If the rejected date is in a usable format, it should be added here.
+        datetime_val = pd.to_datetime(date_value, format='%Y-%m-%d %H:%M:%S', errors="coerce")
+        if pd.isnull(datetime_val):
+            datetime_val = pd.to_datetime(date_value, format='%m/%d/%Y')
+
         # The minus sign before m and d removes leading zeros, to match the format of the original Excel file.
         # Note: this may only work on unix, windows may need to use `#` instead of `-`
-        try:
-            return pd.to_datetime(date_value, format='%Y-%m-%d %H:%M:%S').strftime('%-m/%-d/%Y')
-        except:
-            raise Exception(f"Could not convert collection_date {date_value} to valid datetime.")
+        return datetime_val.strftime('%-m/%-d/%Y')
 
 
 def standardize_barcode(barcode):
@@ -87,7 +91,7 @@ def standardize_barcode(barcode):
         raise ValueError(f"Identifiers must be hexidecimal barcodes, `blank`, or `twist positive`. Invalid barcode: {standardized_barcode}")
 
 def validate_collection_dates(collection_dates):
-    cutoff_datetime = datetime(2022, 2, 1)
+    cutoff_datetime = datetime(2020, 2, 1)
 
     too_early_dates = collection_dates.dropna()[pd.to_datetime(collection_dates, format='%m/%d/%Y') < cutoff_datetime]
 
@@ -104,21 +108,27 @@ def standardize_and_qc_external_metadata(metadata_filename):
     # and writes them back to Excel if data passes all checks.
 
     # Metadata sheet
-    external_metadata_metadata = pd.read_excel(metadata_filename, sheet_name='Metadata')
-    external_metadata_metadata['lab_accession_id'] = external_metadata_metadata['lab_accession_id'].apply(standardize_barcode)
+    external_metadata_metadata = pd.read_excel(metadata_filename, sheet_name='Metadata', converters={'LIMS':int, 'lab_accession_id':str})
+    external_metadata_metadata['lab_accession_id'] = external_metadata_metadata['lab_accession_id'].str.strip()
+    # only standardize internal barcodes
+    external_metadata_metadata['lab_accession_id'] = external_metadata_metadata.apply(lambda row: standardize_barcode(row['lab_accession_id']) if str(row['Project']).startswith(('starita_bbi_', 'SeattleChildrensDirect_')) else row['lab_accession_id'], axis=1)
     external_metadata_metadata['collection_date'] = external_metadata_metadata['collection_date'].apply(standardize_date)
     external_metadata_metadata['Seq date'] = external_metadata_metadata['Seq date'].apply(standardize_date)
+
     # Samplify FC Data sheet
-    external_metadata_samplify_fc_data = pd.read_excel(args.metadata_file, sheet_name='Samplify FC Data', header=1)
-    external_metadata_samplify_fc_data['Investigator\'s sample ID'] = external_metadata_samplify_fc_data['Investigator\'s sample ID'].apply(standardize_barcode)
+    external_metadata_samplify_fc_data = pd.read_excel(args.metadata_file, sheet_name='Samplify FC Data', header=1, converters={'Sample ID':int, 'Investigator\'s sample ID':str})
+    external_metadata_samplify_fc_data['Investigator\'s sample ID'] = external_metadata_samplify_fc_data['Investigator\'s sample ID'].str.strip()
+    # only standardize internal barcodes
+    external_metadata_samplify_fc_data['Investigator\'s sample ID'] = external_metadata_samplify_fc_data.apply(lambda row: standardize_barcode(row['Investigator\'s sample ID']) if str(row['Project']).startswith(('starita_bbi_', 'SeattleChildrensDirect_')) else row['Investigator\'s sample ID'], axis=1)
     external_metadata_samplify_fc_data['Collection date'] = external_metadata_samplify_fc_data['Collection date'].apply(standardize_date)
 
     # Only the collection date from the Metadata sheet is used for creating submission files.
     # Validating to confirm no collection dates prior to Feb 2020 and not all dates are identical.
     validate_collection_dates(external_metadata_metadata['collection_date'])
 
-    # all records with barcodes should be present in both sheets
-    non_matching_ids = pd.merge(external_metadata_metadata[~external_metadata_metadata["lab_accession_id"].isin(['blank', 'twist positive'])],
+    sentinel_ids = ['blank', 'twist positive', 'pbs', 'lp_blank']
+    # all records with unique identifiers should be present in both sheets
+    non_matching_ids = pd.merge(external_metadata_metadata[~external_metadata_metadata["lab_accession_id"].str.lower().isin(sentinel_ids)],
         external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].notna()],
         how="outer",
         left_on=["LIMS", "lab_accession_id"],
@@ -126,7 +136,7 @@ def standardize_and_qc_external_metadata(metadata_filename):
         indicator=True).query("_merge != 'both'")[['LIMS', 'lab_accession_id', 'Sample ID',  'Investigator\'s sample ID']]
 
     # for blanks and twist positives, the sample IDs should present on both sheets, but with empty `Investigator's sample ID` on Samplify FC Data sheet.
-    non_matching_blank_twist_pos = pd.merge(external_metadata_metadata[external_metadata_metadata["lab_accession_id"].isin(['blank', 'twist positive'])],
+    non_matching_blank_twist_pos = pd.merge(external_metadata_metadata[external_metadata_metadata["lab_accession_id"].str.lower().isin(sentinel_ids)],
         external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].isna()],
         how="outer",
         left_on=["LIMS"],

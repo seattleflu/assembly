@@ -405,6 +405,9 @@ def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
     all_vocs_counts = voc_samples.groupby(['clade', 'clade_pangolin', 'who']).size().reset_index(name='counts')
     all_vocs_counts.to_csv(output_dir / f'{batch_name}_total_vocs.csv', index=False)
 
+    vocs_by_source = voc_samples.groupby(['clade', 'clade_pangolin', 'source']).size().reset_index(name='counts')
+    vocs_by_source.to_csv(output_dir / f'{batch_name}_total_vocs_by_source.tsv', index=False, sep='\t')
+
     voc_report_columns = ['who', 'clade', 'clade_pangolin', 'pangolin', 'collection_date', 'sfs_sample_barcode', 'sfs_collection_barcode']
     sfs_vocs = voc_samples.loc[voc_samples['originating_lab'] == 'Seattle Flu Study']
     sfs_sources = sfs_vocs['source'].unique()

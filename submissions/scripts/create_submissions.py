@@ -415,7 +415,7 @@ def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
     """
     vocs = pd.read_csv(base_dir / 'submissions/source-data/variants_of_concern.tsv', sep='\t').rename(columns={'pangolin': 'clade_pangolin'})
     # Concatenate pangolin values for each clade. WHO values should be same per clade, so concatenate and remove duplicates
-    vocs = vocs.groupby(['clade'], as_index = False).agg({'clade_pangolin': ', '.join, 'who': lambda x:', '.join(set(x))})
+    vocs = vocs.groupby(['clade'], as_index = False).agg({'clade_pangolin': ';'.join, 'who': lambda x:';'.join(set(x))})
     exclude_ids = text_to_list(excluded_vocs)
 
     voc_samples = metadata.loc[(metadata['clade'].isin(vocs['clade'])) & (~metadata['nwgc_id'].isin(exclude_ids))]

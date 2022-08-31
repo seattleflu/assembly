@@ -385,6 +385,25 @@ def create_identifiers_report(metadata: pd.DataFrame, output_dir: Path, batch_na
     identifiers[IDENTIFIER_COLUMNS].fillna('N/A').to_csv(output_dir / 'identifiers.tsv', sep='\t', index=False)
 
 
+def create_summary_reports(metadata: pd.DataFrame, excluded_vocs: str,
+                            output_dir: Path, batch_name: str) -> None:
+    """
+    Creates summary reports of sample counts by source and batch's entire and HCT-specific date range.
+    """
+    exclude_ids = text_to_list(excluded_vocs)
+    all_samples = metadata[~metadata['nwgc_id'].isin(exclude_ids)]
+    counts_by_source = all_samples.groupby(['source']).size().reset_index(name='counts')
+    counts_by_source.to_csv(output_dir / f'{batch_name}_sample_count_by_source.tsv', index=False, sep='\t')
+
+    hct_date_range = all_samples[all_samples['source'].str.lower()=='hct'][['collection_date']].dropna().agg(['min','max']).transpose()
+    hct_date_range['source'] = 'HCT'
+
+    all_date_range = all_samples[['collection_date']].dropna().agg(['min','max']).transpose()
+    all_date_range['source'] = 'All'
+
+    pd.concat([hct_date_range, all_date_range]).to_csv(output_dir / f'{batch_name}_sample_date_range.tsv', index=False, sep='\t')
+
+
 def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
                        output_dir: Path, batch_name: str) -> None:
     """
@@ -395,16 +414,21 @@ def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
 
     Samples listed in the provided *exclude_vocs* are excluded from VoC reports
     """
-    vocs = pd.read_csv(base_dir / 'submissions/source-data/variants_of_concern.tsv', sep='\t')
+    vocs = pd.read_csv(base_dir / 'submissions/source-data/variants_of_concern.tsv', sep='\t').rename(columns={'pangolin': 'clade_pangolin'})
+    # Concatenate pangolin values for each clade. WHO values should be same per clade, so concatenate and remove duplicates
+    vocs = vocs.groupby(['clade'], as_index = False).agg({'clade_pangolin': ', '.join, 'who': lambda x:', '.join(set(x))})
     exclude_ids = text_to_list(excluded_vocs)
 
-    voc_samples = metadata.loc[(metadata['pangolin'].isin(vocs['pangolin'])) & (~metadata['nwgc_id'].isin(exclude_ids))]
-    voc_samples = voc_samples.merge(vocs, on=['pangolin'], how='inner')
+    voc_samples = metadata.loc[(metadata['clade'].isin(vocs['clade'])) & (~metadata['nwgc_id'].isin(exclude_ids))]
+    voc_samples = voc_samples.merge(vocs, on=['clade'], how='inner')
 
-    all_vocs_counts = voc_samples.groupby(['who', 'pangolin']).size().reset_index(name='counts')
+    all_vocs_counts = voc_samples.groupby(['clade', 'clade_pangolin', 'who']).size().reset_index(name='counts')
     all_vocs_counts.to_csv(output_dir / f'{batch_name}_total_vocs.csv', index=False)
 
-    voc_report_columns = ['who', 'pangolin', 'collection_date', 'sfs_sample_barcode', 'sfs_collection_barcode']
+    vocs_by_source = voc_samples.groupby(['clade', 'clade_pangolin', 'source']).size().reset_index(name='counts')
+    vocs_by_source.to_csv(output_dir / f'{batch_name}_total_vocs_by_source.tsv', index=False, sep='\t')
+
+    voc_report_columns = ['who', 'clade', 'clade_pangolin', 'pangolin', 'collection_date', 'sfs_sample_barcode', 'sfs_collection_barcode']
     sfs_vocs = voc_samples.loc[voc_samples['originating_lab'] == 'Seattle Flu Study']
     sfs_sources = sfs_vocs['source'].unique()
 
@@ -870,6 +894,7 @@ if __name__ == '__main__':
 
     if args.id3c_metadata is not None:
         create_voc_reports(metadata, args.excluded_vocs, output_dir, batch_name)
+        create_summary_reports(metadata, args.excluded_vocs, output_dir, batch_name)
 
     create_sample_status_report(metadata, output_dir, batch_name)
     create_wa_doh_report(metadata, args.nextclade, output_dir, batch_name)

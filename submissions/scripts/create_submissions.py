@@ -114,7 +114,7 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None) -> pd.Dat
 
         # Set lab accession id to the ID3C exported sample barcode to correct
         # barcodes with any Excel formatting issues
-        id3c_metadata['lab_accession_id'] = id3c_metadata['sfs_sample_barcode']
+        id3c_metadata['lab_accession_id'] = id3c_metadata['sfs_identifier_for_doh_reporting']
         id3c_metadata['sequence_reason'] = id3c_metadata['sequence_reason'].fillna(value='Sentinel surveillance')
         id3c_metadata['originating_lab'] = 'Seattle Flu Study'
         id3c_metadata['submission_group'] = 'sfs'
@@ -145,10 +145,12 @@ def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
         If no location data is provided, assume sequence is from Washington state
         """
         location = metadata_row['county']
+        state = metadata_row['state']
         if pd.isna(location):
             metadata_row['state'] = 'Washington'
-        elif location.lower() in washington_counties:
-            metadata_row['state'] = 'Washington'
+        elif pd.notna(state) and state == 'Washington' and location.lower() in washington_counties:
+            metadata_row['county'] = location.title() + ' County'
+        elif pd.notna(state) and state == 'Oregon' and location.lower() in oregon_counties:
             metadata_row['county'] = location.title() + ' County'
         elif location in manual_annotations['provided_location'].values:
             location_correction = manual_annotations.loc[manual_annotations['provided_location'] == location]
@@ -163,6 +165,9 @@ def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
 
     washington_counties = text_to_list(base_dir / 'submissions/source-data/washington_counties.txt')
     washington_counties = [ county.lower() for county in washington_counties ]
+    oregon_counties = text_to_list(base_dir / 'submissions/source-data/oregon_counties.txt')
+    oregon_counties = [ county.lower() for county in oregon_counties ]
+
     manual_annotations = pd.read_csv( base_dir / 'submissions/source-data/manual_location_annotations.tsv',
                                      dtype='string', sep='\t')
 
@@ -513,7 +518,8 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
     pango_lineages['nwgc_id'] = pango_lineages['seqName'].apply(parse_fasta_id)
 
     # Only submit sequences that are not controls, not duplicates, and not missing collection date
-    not_control = metadata['originating_lab'] != 'sentinel'
+    #not_control = metadata['originating_lab'] != 'sentinel'
+    not_control = metadata['status'] != 'control'
     not_duplicate = metadata['status'] != 'dropped duplicate'
     not_missing_date = metadata['status'] != 'missing collection date'
     # WA DOH asked us only include sequences from Washington state as of Oct 12, 2021

@@ -18,6 +18,8 @@ from extract_sfs_identifiers import read_all_identifiers, find_sfs_identifiers
 import requests
 import getpass
 
+from export_lims_metadata import get_lims_sequencing_metadata
+
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
 logging.basicConfig(
@@ -197,7 +199,6 @@ if __name__ == '__main__':
         help = "Output directory")
     parser.add_argument("--batch-date", required=True,
         help = "Date in YYYYMMDD format")
-
     args = parser.parse_args()
 
     try:
@@ -217,6 +218,7 @@ if __name__ == '__main__':
     OUTPUT_PATHS = {
         'metadata': Path(output_batch_dir, 'external-metadata.xlsx'),
         'id3c-metadata': Path(output_batch_dir, 'id3c-metadata-with-county.csv'),
+        'lims-metadata': Path(output_batch_dir, 'lims-metadata-with-county.csv'),
         'metrics': Path(output_batch_dir, Path(args.results_file).stem).with_suffix('.metrics.tsv'),
         'nextclade': Path(output_batch_dir,'nextclade.tsv'),
         'previous-submissions': Path(output_batch_dir, 'previous-submissions.tsv'),
@@ -240,12 +242,24 @@ if __name__ == '__main__':
     identifiers = read_all_identifiers(OUTPUT_PATHS['metadata'])
     sfs_identifiers = find_sfs_identifiers(identifiers)
 
+    metadata_source = None
     if sfs_identifiers is not None:
         sfs_identifiers.to_csv(OUTPUT_PATHS['sfs-sample-barcodes'], index=False)
-        LOG.debug(f"Saved {len(sfs_identifiers)} SFS identifiers to {OUTPUT_PATHS['id3c-metadata']}.")
+        LOG.debug(f"Saved {len(sfs_identifiers)} SFS identifiers to {OUTPUT_PATHS['sfs-sample-barcodes']}.")
 
-        if yes_no_cancel("Pull metadata from ID3C?"):
+        sfs_missing_date = None
+        if yes_no_cancel("Pull metadata from LIMS?"):
+            LOG.debug("Pulling metadata from LIMS")
+            metadata_source = 'LIMS'
+            lims_metadata = get_lims_sequencing_metadata(sfs_identifiers)
+            lims_metadata.to_csv(OUTPUT_PATHS['lims-metadata'], index=False)
+            LOG.debug(f"Successfully saved LIMS metadata to {OUTPUT_PATHS['lims-metadata']}")
+
+            sfs_missing_date = lims_metadata[(lims_metadata['source'].str.lower()=='sfs')&(lims_metadata['collection_date'].isna())]
+
+        elif yes_no_cancel("Pull metadata from ID3C?"):
             LOG.debug("Pulling metadata from ID3C")
+            metadata_source = 'ID3C'
 
             # The `export_id3c_metadata` bash script is in the same location as current script
             export_id3c_metadata_script = Path(Path(__file__).resolve().parent, "export_id3c_metadata")
@@ -269,17 +283,18 @@ if __name__ == '__main__':
             id3c_metadata_df = pd.read_csv(OUTPUT_PATHS['id3c-metadata'])
             sfs_missing_date = id3c_metadata_df[(id3c_metadata_df['source']=='SFS')&(id3c_metadata_df['collection_date'].isna())]
 
-            if not sfs_missing_date.empty:
-                LOG.debug(f"Warning: {len(sfs_missing_date)} SFS samples missing collection date:\n {sfs_missing_date}")
-                while True:
-                    user_input = input(f"Continue preparing files? [y]es/[n]o: ").lower()
-                    if user_input not in ['y','n']:
-                        print("Not a valid response")
-                        continue
-                    elif user_input == 'n':
-                        sys.exit()
-                    else:
-                        break
+
+        if sfs_missing_date and not sfs_missing_date.empty:
+            LOG.debug(f"Warning: {len(sfs_missing_date)} SFS samples missing collection date:\n {sfs_missing_date}")
+            while True:
+                user_input = input(f"Continue preparing files? [y]es/[n]o: ").lower()
+                if user_input not in ['y','n']:
+                    print("Not a valid response")
+                    continue
+                elif user_input == 'n':
+                    sys.exit()
+                else:
+                    break
 
     while True:
         if yes_no_cancel("Pull previous submissions file from Github?"):
@@ -425,7 +440,7 @@ if __name__ == '__main__':
             f"python3 {create_submissions_script} \\\n"
             f"--batch-name {args.batch_date} \\\n"
             f"--metadata {OUTPUT_PATHS['metadata']} \\\n"
-            f"--id3c-metadata {OUTPUT_PATHS['id3c-metadata']} \\\n"
+            f"--id3c-metadata {OUTPUT_PATHS['id3c-metadata'] if metadata_source == 'ID3C' else OUTPUT_PATHS['lims-metadata']} \\\n"
             f"--fasta {OUTPUT_PATHS['fasta']} \\\n"
             f"--metrics {OUTPUT_PATHS['metrics']} \\\n"
             f"--nextclade {OUTPUT_PATHS['nextclade']} \\\n"

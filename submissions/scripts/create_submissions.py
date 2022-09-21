@@ -9,6 +9,7 @@ Creates the following files:
 - <batch_name>_<study>_vocs.csv: summary of VoCs to share with each <study> in SFS Slack
 - Batch_<batch_name>_sequencing_results.xlsx: summary of sequencing results to upload to WA DOH SFT
 - Batch_<batch_name>_SCH_sequencing_results.xlsx: summary of SCH sequencing results to send to SCH
+- Batch_<batch_name>_OR_sequencing_results.xlsx: summary of sequencing results to upload to OR DOH SFT
 - SFS_<batch_name>_EpiCoV_BulkUpload.csv: CSV to upload to GISAID's bulk upload portal
 - SFS_<batch_name>_EpiCoV_BulkUpload.fasta: FASTA to upload to GISAID's bulk upload portal
 - <batch_name>_<submission_group>__genbank_metadata.tsv: TSV to upload to GenBank's submission portal
@@ -21,7 +22,8 @@ from datetime import datetime
 from typing import List, Set, Optional
 from pathlib import Path
 from Bio import SeqIO
-
+from export_lims_metadata import add_lims_additional_metadata
+import csv
 
 base_dir = Path(__file__).resolve().parent.parent.parent
 SUBMISSION_GROUPS = ['scan', 'sfs', 'wa-doh', 'cascadia']
@@ -304,7 +306,7 @@ def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str]) -> pd.DataF
     metadata.loc[current_duplicate | overall_duplicate, 'status'] = 'dropped duplicate'
 
     # Label control samples
-    metadata.loc[metadata['project'] == 'sentinel', 'status'] = 'control'
+    metadata.loc[metadata['project'].str.lower() == 'sentinel', 'status'] = 'control'
 
     # Label samples with >10% Ns in the genome
     metadata.loc[pd.to_numeric(metadata['percent_ns'], errors='coerce') > 10, 'status'] = '>10% Ns'
@@ -451,6 +453,135 @@ def create_sample_status_report(metadata: pd.DataFrame, output_dir: Path, batch_
     sample_status_columns = ['nwgc_id', 'status', 'percent_ns']
     metadata[sample_status_columns].to_csv(output_dir / f'{batch_name}_sample_status.csv', index=False)
 
+def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path, batch_name: str) -> None:
+    """
+    Create CSV report of sequences for Oregon samples in *metadata*, to be submitted to OR DOH via SFT.
+    """
+
+    doh_columns = [
+        'Sending Application',
+        'Facility Name',
+        'Facility CLIA',
+        'Facility Street Address',
+        'Facility City',
+        'Facility State',
+        'Facility Zip',
+        'Facility Phone',
+        'Date/Time of Message',
+        'Patient Identifier',
+        'Patient First Name',
+        'Patient Last Name',
+        'Patient Date of Birth',
+        'Patient Sex',
+        'Race',
+        'Ethnicity',
+        'Language',
+        'Patient Street Address',
+        'Patient City',
+        'Patient County',
+        'Patient Zip',
+        'Patient Phone Number',
+        'OK to Contact Patient',
+        'Insurance',
+        'Expedited Partner Therapy Received',
+        'Provider First Name',
+        'Provider Last Name',
+        'Provider Phone Number',
+        'Specimen ID',
+        'Collection Date',
+        'Specimen Type',
+        'Test Name',
+        'Result',
+        'Notes',
+        'First Test',
+        'Employed In Health Care',
+        'Symptomatic As defined by CDC',
+        'Symptom Onset',
+        'Hospitalized',
+        'ICU',
+        'Resident in Congregate Care Setting',
+        'Pregnant',
+    ]
+
+    column_map = {
+        'lab_accession_id': 'Specimen ID',
+        'strain_name': 'Notes',
+        'collection_date': 'Collection Date',
+        'Nextclade_pango': 'Result',
+
+        'participant_id': 'Patient Identifier',
+        'first_name': 'Patient First Name',
+        'last_name': 'Patient Last Name',
+        'birthdate': 'Patient Date of Birth',
+        'sex': 'Patient Sex',
+        'street': 'Patient Street Address',
+        'city': 'Patient City',
+        'state': 'Patient State',
+        'zip': 'Patient Zip',
+        'phone': 'Patient Phone Number',
+        'specimen_collection_site': 'Specimen Site',
+    }
+
+    # PANGO lineages generated from running FASTA file through https://clades.nextstrain.org/
+    pango_columns = ['seqName', 'Nextclade_pango']
+    pango_lineages = pd.read_csv(pangolin, dtype='string', sep='\t', usecols=pango_columns)
+    pango_lineages['nwgc_id'] = pango_lineages['seqName'].apply(parse_fasta_id)
+
+    # Only submit sequences that are not controls, not duplicates, and not missing collection date
+    not_control = metadata['originating_lab'] != 'sentinel'
+    not_duplicate = metadata['status'] != 'dropped duplicate'
+    not_missing_date = metadata['status'] != 'missing collection date'
+
+    oregon_state_only = metadata['state'] == 'Oregon'
+    doh_report = metadata.loc[(not_control) & (not_duplicate) & (not_missing_date) & (oregon_state_only)].copy(deep=True)
+    doh_report = doh_report.merge(pango_lineages, on=['nwgc_id'], how='left')
+    doh_report = add_lims_additional_metadata(doh_report)
+
+    # Convert date to YYYYMMDD format according to OR DOH template
+    doh_report['collection_date'] = doh_report['collection_date'].apply(standardize_date, args=('%Y%m%d',))
+    # Only include PANGO lineages for completed sequences
+    doh_report.loc[doh_report['status'] != 'submitted', 'Nextclade_pango'] = 'N/A'
+
+    # Hard-coded values
+    doh_report['Facility Name'] = 'Northwest Genomics Center'
+    doh_report['Facility CLIA'] = '50D2050662'
+    doh_report['Facility Street Address'] = '3720 15th Ave NE'
+    doh_report['Facility City'] = 'Seattle'
+    doh_report['Facility State'] = 'WA'
+    doh_report['Facility Zip'] = '98195'
+    doh_report['Facility Phone'] = '206-616-5859'
+    doh_report['Date/Time of Message'] = datetime.now().strftime('%Y%m%d')
+    doh_report['Test Name'] = 'COVSEQ'
+    doh_report['Specimen Type'] = 'Swab of internal nose'
+
+    blank_fields = [
+        'Sending Application',
+        'Race',
+        'Ethnicity',
+        'Language',
+        'Patient County',
+        'OK to Contact Patient',
+        'Insurance',
+        'Expedited Partner Therapy Received',
+        'Provider First Name',
+        'Provider Last Name',
+        'Provider Phone Number',
+        'First Test',
+        'Employed In Health Care',
+        'Symptomatic As defined by CDC',
+        'Symptom Onset',
+        'Hospitalized',
+        'ICU',
+        'Resident in Congregate Care Setting',
+        'Pregnant',
+    ]
+    for f in blank_fields:
+        doh_report[f] = ''
+
+    doh_report.rename(columns=column_map, inplace=True)
+
+    doh_report[doh_columns].to_csv(output_dir / f'Batch_{batch_name}_OR_sequencing_results.csv', index=False, quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
+
 
 def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path, batch_name: str) -> None:
     """
@@ -518,8 +649,7 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
     pango_lineages['nwgc_id'] = pango_lineages['seqName'].apply(parse_fasta_id)
 
     # Only submit sequences that are not controls, not duplicates, and not missing collection date
-    #not_control = metadata['originating_lab'] != 'sentinel'
-    not_control = metadata['status'] != 'control'
+    not_control = metadata['originating_lab'] != 'sentinel'
     not_duplicate = metadata['status'] != 'dropped duplicate'
     not_missing_date = metadata['status'] != 'missing collection date'
     # WA DOH asked us only include sequences from Washington state as of Oct 12, 2021
@@ -904,6 +1034,7 @@ if __name__ == '__main__':
 
     create_sample_status_report(metadata, output_dir, batch_name)
     create_wa_doh_report(metadata, args.nextclade, output_dir, batch_name)
+    create_or_doh_report(metadata, args.nextclade, output_dir, batch_name)
 
     # Only create submissions for sequences that have status "submitted"
     submit_metadata = metadata.loc[metadata['status'] == 'submitted']

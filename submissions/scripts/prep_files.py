@@ -18,7 +18,7 @@ from extract_sfs_identifiers import read_all_identifiers, find_sfs_identifiers
 import requests
 import getpass
 
-from export_lims_metadata import get_lims_sequencing_metadata
+from export_lims_metadata import add_lims_metadata
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
@@ -117,6 +117,9 @@ def standardize_and_qc_external_metadata(metadata_filename):
     external_metadata_metadata['collection_date'] = external_metadata_metadata['collection_date'].apply(standardize_date)
     external_metadata_metadata['Seq date'] = external_metadata_metadata['Seq date'].apply(standardize_date)
 
+    # Set submitting_lab to sentinel for records with Project = sentinel
+    external_metadata_metadata.loc[external_metadata_metadata['Project'].str.lower()=='sentinel', 'submitting_lab'] = 'sentinel'
+
     # Samplify FC Data sheet
     external_metadata_samplify_fc_data = pd.read_excel(args.metadata_file, sheet_name='Samplify FC Data', header=1, converters={'Sample ID':int, 'Investigator\'s sample ID':str})
     external_metadata_samplify_fc_data['Investigator\'s sample ID'] = external_metadata_samplify_fc_data['Investigator\'s sample ID'].str.strip()
@@ -167,6 +170,9 @@ def standardize_and_qc_external_metadata(metadata_filename):
         if yes_no_cancel("Drop Cascadia samples?"):
             external_metadata_metadata.drop(cascadia_samples.index, inplace=True)
             external_metadata_samplify_fc_data.drop(cascadia_samples_samplify.index, inplace=True)
+        else:
+            # Cascadia samples should be marked as sequence_reson: Other
+            external_metadata_metadata.loc[cascadia_samples.index, 'sequence_reason'] = 'Other'
 
     # The Samplify FC Data sheet has an extra row before the headers. Stashing this value to reinsert the row when writing back to Excel.
     metadata_wb = load_workbook(args.metadata_file)
@@ -217,8 +223,6 @@ if __name__ == '__main__':
 
     OUTPUT_PATHS = {
         'metadata': Path(output_batch_dir, 'external-metadata.xlsx'),
-        'id3c-metadata': Path(output_batch_dir, 'id3c-metadata-with-county.csv'),
-        'lims-metadata': Path(output_batch_dir, 'lims-metadata-with-county.csv'),
         'metrics': Path(output_batch_dir, Path(args.results_file).stem).with_suffix('.metrics.tsv'),
         'nextclade': Path(output_batch_dir,'nextclade.tsv'),
         'previous-submissions': Path(output_batch_dir, 'previous-submissions.tsv'),
@@ -242,7 +246,6 @@ if __name__ == '__main__':
     identifiers = read_all_identifiers(OUTPUT_PATHS['metadata'])
     sfs_identifiers = find_sfs_identifiers(identifiers)
 
-    metadata_source = None
     if sfs_identifiers is not None:
         sfs_identifiers.to_csv(OUTPUT_PATHS['sfs-sample-barcodes'], index=False)
         LOG.debug(f"Saved {len(sfs_identifiers)} SFS identifiers to {OUTPUT_PATHS['sfs-sample-barcodes']}.")
@@ -250,8 +253,9 @@ if __name__ == '__main__':
         sfs_missing_date = None
         if yes_no_cancel("Pull metadata from LIMS?"):
             LOG.debug("Pulling metadata from LIMS")
-            metadata_source = 'LIMS'
-            lims_metadata = get_lims_sequencing_metadata(sfs_identifiers)
+            OUTPUT_PATHS['lims-metadata'] = Path(output_batch_dir, 'lims-metadata-with-county.csv')
+
+            lims_metadata = add_lims_metadata(sfs_identifiers)
             lims_metadata.to_csv(OUTPUT_PATHS['lims-metadata'], index=False)
             LOG.debug(f"Successfully saved LIMS metadata to {OUTPUT_PATHS['lims-metadata']}")
 
@@ -259,7 +263,7 @@ if __name__ == '__main__':
 
         elif yes_no_cancel("Pull metadata from ID3C?"):
             LOG.debug("Pulling metadata from ID3C")
-            metadata_source = 'ID3C'
+            OUTPUT_PATHS['id3c-metadata'] = Path(output_batch_dir, 'id3c-metadata-with-county.csv')
 
             # The `export_id3c_metadata` bash script is in the same location as current script
             export_id3c_metadata_script = Path(Path(__file__).resolve().parent, "export_id3c_metadata")
@@ -284,7 +288,7 @@ if __name__ == '__main__':
             sfs_missing_date = id3c_metadata_df[(id3c_metadata_df['source']=='SFS')&(id3c_metadata_df['collection_date'].isna())]
 
 
-        if sfs_missing_date and not sfs_missing_date.empty:
+        if sfs_missing_date is not None and not sfs_missing_date.empty:
             LOG.debug(f"Warning: {len(sfs_missing_date)} SFS samples missing collection date:\n {sfs_missing_date}")
             while True:
                 user_input = input(f"Continue preparing files? [y]es/[n]o: ").lower()
@@ -440,7 +444,7 @@ if __name__ == '__main__':
             f"python3 {create_submissions_script} \\\n"
             f"--batch-name {args.batch_date} \\\n"
             f"--metadata {OUTPUT_PATHS['metadata']} \\\n"
-            f"--id3c-metadata {OUTPUT_PATHS['id3c-metadata'] if metadata_source == 'ID3C' else OUTPUT_PATHS['lims-metadata']} \\\n"
+            f"--id3c-metadata {OUTPUT_PATHS['id3c-metadata'] if 'id3c-metadata' in OUTPUT_PATHS else OUTPUT_PATHS['lims-metadata']} \\\n"
             f"--fasta {OUTPUT_PATHS['fasta']} \\\n"
             f"--metrics {OUTPUT_PATHS['metrics']} \\\n"
             f"--nextclade {OUTPUT_PATHS['nextclade']} \\\n"

@@ -6,6 +6,7 @@ channels:
 dependencies:
   - biopython
   - openpyxl
+  - xlsxwriter
   - pandas
   - conda
   - nextclade

@@ -92,20 +92,20 @@ def standardize_barcode(barcode):
     else:
         raise ValueError(f"Identifiers must be hexidecimal barcodes, `blank`, or `twist positive`. Invalid barcode: {standardized_barcode}")
 
-def validate_collection_dates(collection_dates):
+def validate_collection_dates(collection_dates: pd.Series, batch_date: datetime):
     cutoff_datetime = datetime(2020, 2, 1)
 
-    too_early_dates = collection_dates.dropna()[pd.to_datetime(collection_dates, format='%m/%d/%Y') < cutoff_datetime]
+    out_of_range = collection_dates.dropna()[(pd.to_datetime(collection_dates, format='%m/%d/%Y') < cutoff_datetime)|(pd.to_datetime(collection_dates, format='%m/%d/%Y') > batch_date)]
 
-    if not too_early_dates.empty:
-        raise Exception(f"Error: Collection date(s) earlier than {cutoff_datetime.strftime('%Y-%m-%d')}:\n {too_early_dates}")
+    if not out_of_range.empty:
+        raise Exception(f"Error: Collection date(s) out of range ({cutoff_datetime.strftime('%Y-%m-%d')} to {batch_date.strftime('%Y-%m-%d')}):\n {out_of_range}")
 
     if len(collection_dates.dropna().unique()) < 2:
         raise Exception(f"Error: All collection dates values are the same:\n {collection_dates.unique()}")
 
 
 
-def standardize_and_qc_external_metadata(metadata_filename):
+def standardize_and_qc_external_metadata(metadata_filename:str, batch_date:datetime):
     # Standardize and validate barcode and date values on external metadata Excel file. Loads 2 sheets to dataframes
     # and writes them back to Excel if data passes all checks.
 
@@ -129,7 +129,7 @@ def standardize_and_qc_external_metadata(metadata_filename):
 
     # Only the collection date from the Metadata sheet is used for creating submission files.
     # Validating to confirm no collection dates prior to Feb 2020 and not all dates are identical.
-    validate_collection_dates(external_metadata_metadata['collection_date'])
+    validate_collection_dates(external_metadata_metadata['collection_date'], batch_date)
 
     sentinel_ids = ['blank', 'twist positive', 'pbs', 'lp_blank']
     # all records with unique identifiers should be present in both sheets
@@ -208,7 +208,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     try:
-        datetime.strptime(args.batch_date, '%Y%m%d')
+        batch_date = datetime.strptime(args.batch_date, '%Y%m%d')
     except ValueError:
         raise ValueError("Incorrect date format, should be YYYYMMDD")
 
@@ -240,7 +240,7 @@ if __name__ == '__main__':
     assemby_results_file.extractall(output_batch_dir)
     assemby_results_file.close()
 
-    standardize_and_qc_external_metadata(args.metadata_file)
+    standardize_and_qc_external_metadata(args.metadata_file, batch_date)
 
     # create CSV of SFS sample barcodes
     identifiers = read_all_identifiers(OUTPUT_PATHS['metadata'])

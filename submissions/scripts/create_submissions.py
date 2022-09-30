@@ -535,52 +535,55 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
     oregon_state_only = metadata['state'] == 'Oregon'
     doh_report = metadata.loc[(not_control) & (not_duplicate) & (not_missing_date) & (oregon_state_only)].copy(deep=True)
     doh_report = doh_report.merge(pango_lineages, on=['nwgc_id'], how='left')
-    doh_report = add_lims_additional_metadata(doh_report)
+    if not doh_report.empty:
+        doh_report = add_lims_additional_metadata(doh_report)
 
-    # Convert date to YYYYMMDD format according to OR DOH template
-    doh_report['collection_date'] = doh_report['collection_date'].apply(standardize_date, args=('%Y%m%d',))
-    # Only include PANGO lineages for completed sequences
-    doh_report.loc[doh_report['status'] != 'submitted', 'Nextclade_pango'] = 'N/A'
+        # Convert date to YYYYMMDD format according to OR DOH template
+        doh_report['collection_date'] = doh_report['collection_date'].apply(standardize_date, args=('%Y%m%d',))
+        # Only include PANGO lineages for completed sequences
+        doh_report.loc[doh_report['status'] != 'submitted', 'Nextclade_pango'] = 'N/A'
 
-    # Hard-coded values
-    doh_report['Facility Name'] = 'Northwest Genomics Center'
-    doh_report['Facility CLIA'] = '50D2050662'
-    doh_report['Facility Street Address'] = '3720 15th Ave NE'
-    doh_report['Facility City'] = 'Seattle'
-    doh_report['Facility State'] = 'WA'
-    doh_report['Facility Zip'] = '98195'
-    doh_report['Facility Phone'] = '206-616-5859'
-    doh_report['Date/Time of Message'] = datetime.now().strftime('%Y%m%d')
-    doh_report['Test Name'] = 'COVSEQ'
-    doh_report['Specimen Type'] = 'Swab of internal nose'
+        # Hard-coded values
+        doh_report['Facility Name'] = 'Northwest Genomics Center'
+        doh_report['Facility CLIA'] = '50D2050662'
+        doh_report['Facility Street Address'] = '3720 15th Ave NE'
+        doh_report['Facility City'] = 'Seattle'
+        doh_report['Facility State'] = 'WA'
+        doh_report['Facility Zip'] = '98195'
+        doh_report['Facility Phone'] = '206-616-5859'
+        doh_report['Date/Time of Message'] = datetime.now().strftime('%Y%m%d')
+        doh_report['Test Name'] = 'COVSEQ'
+        doh_report['Specimen Type'] = 'Swab of internal nose'
 
-    blank_fields = [
-        'Sending Application',
-        'Race',
-        'Ethnicity',
-        'Language',
-        'Patient County',
-        'OK to Contact Patient',
-        'Insurance',
-        'Expedited Partner Therapy Received',
-        'Provider First Name',
-        'Provider Last Name',
-        'Provider Phone Number',
-        'First Test',
-        'Employed In Health Care',
-        'Symptomatic As defined by CDC',
-        'Symptom Onset',
-        'Hospitalized',
-        'ICU',
-        'Resident in Congregate Care Setting',
-        'Pregnant',
-    ]
-    for f in blank_fields:
-        doh_report[f] = ''
+        blank_fields = [
+            'Sending Application',
+            'Race',
+            'Ethnicity',
+            'Language',
+            'Patient County',
+            'OK to Contact Patient',
+            'Insurance',
+            'Expedited Partner Therapy Received',
+            'Provider First Name',
+            'Provider Last Name',
+            'Provider Phone Number',
+            'First Test',
+            'Employed In Health Care',
+            'Symptomatic As defined by CDC',
+            'Symptom Onset',
+            'Hospitalized',
+            'ICU',
+            'Resident in Congregate Care Setting',
+            'Pregnant',
+        ]
+        for f in blank_fields:
+            doh_report[f] = ''
 
-    doh_report.rename(columns=column_map, inplace=True)
+        doh_report.rename(columns=column_map, inplace=True)
 
-    doh_report[doh_columns].to_csv(output_dir / f'Batch_{batch_name}_OR_sequencing_results.csv', index=False, quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
+        doh_report[doh_columns].to_csv(output_dir / f'Batch_{batch_name}_OR_sequencing_results.csv', index=False, quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
+    else:
+        print(f"No valid Oregon samples found, skipping OR DOH Report.")
 
 
 def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path, batch_name: str) -> None:

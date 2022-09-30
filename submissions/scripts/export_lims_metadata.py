@@ -162,10 +162,7 @@ def add_lims_additional_metadata(input_df:pd.DataFrame) -> pd.DataFrame:
     print(f"Received {len(result)} additional metadata (Oregon) records from LIMS.")
 
     output_df = pd.merge(input_df, result, on=['sfs_collection_barcode'])
-    #remaining_records = input_df[(~input_df.nwgc_id.isin(output_df.nwgc_id))]
-    #remaining_records_joined = pd.merge(remaining_records, result, on=['sfs_sample_barcode'])
 
-    #output_df = pd.concat([output_df, remaining_records_joined], ignore_index=True).sort_values(by=['nwgc_id'])
     return output_df
 
 

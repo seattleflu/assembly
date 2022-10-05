@@ -153,6 +153,9 @@ def add_lims_metadata(input_df:pd.DataFrame) -> pd.DataFrame:
         'error_message'
     ]
 
+    # For Cascadia, use sfs_identifier_for_doh_reporting value as sfs_sample_identifier
+    output_df.loc[output_df['source'].str.lower() == 'cascadia','sfs_sample_identifier'] = output_df['sfs_identifier_for_doh_reporting']
+
     return output_df[OUTPUT_COLS]
 
 

@@ -6,5 +6,9 @@ channels:
 dependencies:
   - biopython
   - openpyxl
+  - xlsxwriter
   - pandas
+  - conda
+  - nextclade
+  - docker-py
   - python=3.8

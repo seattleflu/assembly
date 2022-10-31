@@ -22,12 +22,14 @@ def read_all_identifiers(metadata_file: str) -> pd.DataFrame:
         'Samplify FC data' : {
             'Sample ID': 'nwgc_id',
             'Project': 'project',
-            'Investigator\'s sample ID': 'sfs_sample_barcode'
+            'Investigator\'s sample ID': 'sfs_sample_barcode',
+            'Origin': 'sample_origin',
         },
         'Metadata' : {
             'LIMS': 'nwgc_id',
             'Project': 'project',
-            'lab_accession_id': 'sfs_sample_barcode'
+            'lab_accession_id': 'sfs_sample_barcode',
+            'county': 'sample_origin'
         },
     }
 
@@ -51,7 +53,7 @@ def read_all_identifiers(metadata_file: str) -> pd.DataFrame:
     sys.exit(f"No known sheet names found in metadata Excel file. It contains the following sheet names: {all_sheets.keys()}")
 
 
-def find_sfs_identifiers(identifiers: pd.DataFrame) -> Optional[pd.DataFrame]:
+def find_sfs_identifiers(identifiers: pd.DataFrame, sample_origin_filter=None) -> Optional[pd.DataFrame]:
     """
     Find SFS identifiers within provided *identifiers* based on regex matches
     of the 'project' column.
@@ -60,7 +62,7 @@ def find_sfs_identifiers(identifiers: pd.DataFrame) -> Optional[pd.DataFrame]:
     """
     SFS_PROJECT_REGEX = r'(SeattleChildrensDirect_|starita_bbi_)'
     SFS_BARCODE_REGEX = r'^[a-f0-9]{8}$'
-    SFS_OUTPUT_COLUMNS = ['nwgc_id', 'sfs_sample_barcode']
+    SFS_OUTPUT_COLUMNS = ['nwgc_id', 'sfs_sample_barcode', 'sample_origin']
 
     sfs_samples = identifiers.loc[identifiers['project'].str.match(SFS_PROJECT_REGEX)]
 
@@ -73,7 +75,10 @@ def find_sfs_identifiers(identifiers: pd.DataFrame) -> Optional[pd.DataFrame]:
     if len(bad_barcodes.index) > 0:
         print(f"Found the following erroneous barcodes: {list(bad_barcodes['sfs_sample_barcode'].values)}")
 
-    return sfs_samples[SFS_OUTPUT_COLUMNS]
+    if sample_origin_filter:
+        return sfs_samples[sfs_samples['sample_origin'].str.contains(sample_origin_filter)][SFS_OUTPUT_COLUMNS]
+    else:
+        return sfs_samples[SFS_OUTPUT_COLUMNS]
 
 
 
@@ -94,4 +99,3 @@ if __name__ == '__main__':
 
     if sfs_identifiers is not None:
         sfs_identifiers.to_csv(args.output, index=False)
-

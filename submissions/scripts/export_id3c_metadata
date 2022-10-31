@@ -16,15 +16,17 @@ if [ -z ${1+x} ]; then
 fi
 
 columns=$(head -n1 $1)
-expected_columns="nwgc_id,sfs_sample_barcode"
+expected_columns="nwgc_id,sfs_sample_barcode,sample_origin"
 if [ "$columns" != "$expected_columns" ]; then
     echo "Error: CSV columns do not match expected columns «"$expected_columns"»." >&2
     exit
 fi
 
 psql --quiet --no-align --tuples-only --set ON_ERROR_STOP= <<<"
-    create temp table batch(nwgc_id text, sfs_sample_barcode citext);
+    create temp table batch(nwgc_id text, sfs_sample_barcode citext, sample_origin text);
     \copy batch ("$columns") from '"$1"' csv header
+
+    delete from batch where sample_origin not like '%_retro';
 
     create temp view batch_export as (
         select

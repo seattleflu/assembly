@@ -540,6 +540,7 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
 
         # Convert date to YYYYMMDD format according to OR DOH template
         doh_report['collection_date'] = doh_report['collection_date'].apply(standardize_date, args=('%Y%m%d',))
+        doh_report['birthdate'] = doh_report['birthdate'].apply(standardize_date, args=('%Y%m%d',))
         # Only include PANGO lineages for completed sequences
         doh_report.loc[doh_report['status'] != 'submitted', 'Nextclade_pango'] = 'N/A'
 

@@ -64,9 +64,10 @@ def lims_api_request(body: json, path: str) -> Response:
         response.raise_for_status()
 
 
-def chunk(arr_range, arr_size):
-    arr_range = iter(arr_range)
-    return iter(lambda: tuple(islice(arr_range, arr_size)), ())
+def chunk(arr, arr_size):
+    for i in range(0, len(arr), arr_size):
+        yield arr[i:i + arr_size]
+
 
 def get_lims_sequencing_metadata(barcodes: list):
 
@@ -75,7 +76,7 @@ def get_lims_sequencing_metadata(barcodes: list):
     result = pd.DataFrame()
 
     for barcode_list in barcode_lists:
-        body = json.dumps([{"anyBarcode": b} for b in barcode_list if not str(b).endswith("_exp")])
+        body = json.dumps([{"anyBarcode": b} for b in barcode_list]) # if not str(b).endswith("_exp")])
 
         response = lims_api_request(body, '/api/v1/sfs-specimens/sequencing-submission-metadata')
 
@@ -96,7 +97,12 @@ def get_lims_sequencing_metadata(barcodes: list):
                 'sequencing.sentinelSurveillance': 'baseline_surveillance',
                 'error.message': 'error_message',
             }
-            df.rename(columns=column_map, inplace=True)
+            df.rename(columns=column_map, inplace=True, errors='ignore')
+
+            #add missing columns
+            for col in column_map.values():
+                if col not in df.columns:
+                    df[col] = pd.NA
 
             df['baseline_surveillance'] = df['baseline_surveillance'].map({True:'t', False:'f'})
 
@@ -104,6 +110,7 @@ def get_lims_sequencing_metadata(barcodes: list):
                 invalid_addresses = df[df['error_message'] == 'Address could not be validated.']
                 if not invalid_addresses.empty:
                     raise Exception(f"Error: invalid addresses: \n {invalid_addresses[['sfs_sample_identifier','sfs_sample_barcode']].to_json(orient='records')}")
+
 
             result = result.append(df, ignore_index = True)
         else:
@@ -148,9 +155,11 @@ def add_lims_metadata(input_df:pd.DataFrame) -> pd.DataFrame:
 
     output_df = pd.merge(input_df, result, on=['sfs_sample_barcode'])
     remaining_records = input_df[(~input_df.nwgc_id.isin(output_df.nwgc_id))]
-    if not remaining_records.empty:
-        remaining_records_joined = pd.merge(remaining_records, result, left_on='sfs_sample_barcode', right_on='sfs_collection_barcode')
 
+    # try to join these on collection barcode
+    if not remaining_records.empty:
+        remaining_records.rename(columns={'sfs_sample_barcode': 'sfs_collection_barcode'}, inplace=True)
+        remaining_records_joined = pd.merge(remaining_records, result, on='sfs_collection_barcode')
         output_df = pd.concat([output_df, remaining_records_joined], ignore_index=True).sort_values(by=['nwgc_id'])
 
     OUTPUT_COLS = [

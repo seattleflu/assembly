@@ -160,6 +160,9 @@ def standardize_and_qc_external_metadata(metadata_filename:str, batch_date:datet
         if yes_no_cancel("Drop expirimental samples?"):
             external_metadata_metadata.drop(exp_samples.index, inplace=True)
             external_metadata_samplify_fc_data.drop(exp_samples_samplify.index, inplace=True)
+        else:
+            external_metadata_metadata = exp_samples
+            external_metadata_samplify_fc_data = exp_samples_samplify
 
     # Identify and optionally remove cascadia samples
     cascadia_samples = external_metadata_metadata[external_metadata_metadata['county'].str.lower().str.strip() == 'cascadia']
@@ -249,6 +252,8 @@ if __name__ == '__main__':
     sfs_non_retro_identifiers = find_sfs_identifiers(identifiers, '^(?!.*_retro).*$')
 
     sfs_missing_date = pd.DataFrame()
+
+    LOG.debug(f"sfs_non_retro_identifiers: {sfs_non_retro_identifiers}")
 
     if sfs_non_retro_identifiers is not None:
         sfs_non_retro_identifiers.to_csv(OUTPUT_PATHS['sfs-non-retro-sample-barcodes'], index=False)

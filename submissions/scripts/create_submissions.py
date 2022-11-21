@@ -103,31 +103,22 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None, lims_meta
     lims_id3c_metadata = pd.DataFrame()
     if id3c_metadata_file:
         id3c_metadata = pd.read_csv(id3c_metadata_file, dtype='string')
+
         # Convert PostgreSQL t/f values to Python boolean
-        d = {'t': True, 'f': False}
-        id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].map(d)
+        id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].map({'t': True, 'f': False})
         # add this column to match format of LIMS metadata
         id3c_metadata['sfs_identifier_for_doh_reporting'] = id3c_metadata['sfs_sample_barcode']
+
         lims_id3c_metadata = lims_id3c_metadata.append(id3c_metadata)
 
     if lims_metadata_file:
         lims_metadata = pd.read_csv(lims_metadata_file, dtype='string')
+
          # Convert PostgreSQL t/f values to Python boolean
-        d = {'t': True, 'f': False}
-        lims_metadata['baseline_surveillance'] = lims_metadata['baseline_surveillance'].map(d)
-        # add this column to match format of LIMS metadata
+        lims_metadata['baseline_surveillance'] = lims_metadata['baseline_surveillance'].map({'t': True, 'f': False})
+
         lims_id3c_metadata = lims_id3c_metadata.append(lims_metadata)
 
-    #if lims_metadata_file:
-    #    lims_metadata = pd.read_csv(lims_metadata_file, dtype='string')
-    #    # Convert PostgreSQL t/f values to Python boolean
-    #    d = {'t': True, 'f': False}
-    #    lims_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].map(d)
-
-    # if both ID3C and LIMS metadata are provided, use ID3C for retros and LIMS for everything else.
-    #if not id3c_metadata.empty:
-        #id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].apply(
-            #lambda x: True if x == 't' else False)
     if not lims_id3c_metadata.empty:
         # Find rows in external metdata that match ID3C samples
         external_metadata = metadata.loc[metadata['nwgc_id'].isin(lims_id3c_metadata['nwgc_id'])]
@@ -463,7 +454,7 @@ def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
 
     voc_report_columns = ['who', 'clade', 'clade_pangolin', 'pangolin', 'collection_date', 'sfs_sample_barcode', 'sfs_collection_barcode']
     sfs_vocs = voc_samples.loc[voc_samples['originating_lab'] == 'Seattle Flu Study']
-    sfs_sources = sfs_vocs['source'].unique()
+    sfs_sources = sfs_vocs['source'].dropna().unique()
 
     for source in sfs_sources:
         source_vocs = sfs_vocs.loc[sfs_vocs['source'] == source][voc_report_columns]

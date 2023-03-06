@@ -160,6 +160,9 @@ def standardize_and_qc_external_metadata(metadata_filename:str, batch_date:datet
         if yes_no_cancel("Drop expirimental samples?"):
             external_metadata_metadata.drop(exp_samples.index, inplace=True)
             external_metadata_samplify_fc_data.drop(exp_samples_samplify.index, inplace=True)
+        else:
+            external_metadata_metadata = exp_samples
+            external_metadata_samplify_fc_data = exp_samples_samplify
 
     # Identify and optionally remove cascadia samples
     cascadia_samples = external_metadata_metadata[external_metadata_metadata['county'].str.lower().str.strip() == 'cascadia']
@@ -230,7 +233,8 @@ if __name__ == '__main__':
         'excluded-vocs': Path(output_batch_dir, 'excluded-vocs.txt'),
         'vadr-dir': Path(output_batch_dir, 'genbank'), #this one is a folder
 
-        'sfs-sample-barcodes': Path(output_batch_dir, 'sfs-sample-barcodes.csv'),
+        'sfs-non-retro-sample-barcodes': Path(output_batch_dir, 'sfs-non-retro-sample-barcodes.csv'),
+        'sfs-retro-sample-barcodes': Path(output_batch_dir, 'sfs-retro-sample-barcodes.csv'),
         'nextclade-sars-cov-2': Path(output_batch_dir, 'data/sars-cov-2'),
     }
 
@@ -244,24 +248,32 @@ if __name__ == '__main__':
 
     # create CSV of SFS sample barcodes
     identifiers = read_all_identifiers(OUTPUT_PATHS['metadata'])
-    sfs_identifiers = find_sfs_identifiers(identifiers)
+    sfs_retro_identifiers = find_sfs_identifiers(identifiers, '^.*_retro$')
+    sfs_non_retro_identifiers = find_sfs_identifiers(identifiers, '^(?!.*_retro).*$')
 
-    if sfs_identifiers is not None:
-        sfs_identifiers.to_csv(OUTPUT_PATHS['sfs-sample-barcodes'], index=False)
-        LOG.debug(f"Saved {len(sfs_identifiers)} SFS identifiers to {OUTPUT_PATHS['sfs-sample-barcodes']}.")
+    sfs_missing_date = pd.DataFrame()
 
-        sfs_missing_date = None
+    LOG.debug(f"sfs_non_retro_identifiers: {sfs_non_retro_identifiers}")
+
+    if sfs_non_retro_identifiers is not None:
+        sfs_non_retro_identifiers.to_csv(OUTPUT_PATHS['sfs-non-retro-sample-barcodes'], index=False)
+        LOG.debug(f"Saved {len(sfs_non_retro_identifiers)} SFS identifiers to {OUTPUT_PATHS['sfs-non-retro-sample-barcodes']}.")
+
+        #sfs_missing_date = None
         if yes_no_cancel("Pull metadata from LIMS?"):
             LOG.debug("Pulling metadata from LIMS")
             OUTPUT_PATHS['lims-metadata'] = Path(output_batch_dir, 'lims-metadata-with-county.csv')
 
-            lims_metadata = add_lims_metadata(sfs_identifiers)
+            lims_metadata = add_lims_metadata(sfs_non_retro_identifiers)
             lims_metadata.to_csv(OUTPUT_PATHS['lims-metadata'], index=False)
             LOG.debug(f"Successfully saved LIMS metadata to {OUTPUT_PATHS['lims-metadata']}")
 
             sfs_missing_date = lims_metadata[(lims_metadata['source'].str.lower()=='sfs')&(lims_metadata['collection_date'].isna())]
 
-        elif yes_no_cancel("Pull metadata from ID3C?"):
+    if sfs_retro_identifiers is not None:
+        sfs_retro_identifiers.to_csv(OUTPUT_PATHS['sfs-retro-sample-barcodes'], index=False)
+
+        if yes_no_cancel("Pull metadata from ID3C?"):
             LOG.debug("Pulling metadata from ID3C")
             OUTPUT_PATHS['id3c-metadata'] = Path(output_batch_dir, 'id3c-metadata-with-county.csv')
 
@@ -272,7 +284,7 @@ if __name__ == '__main__':
             stdout = sys.stdout
             with open(OUTPUT_PATHS['id3c-metadata'], 'w') as sys.stdout:
                 result = Conda.run_command('run', f"{export_id3c_metadata_script}",
-                    f"{OUTPUT_PATHS['sfs-sample-barcodes']}",
+                    f"{OUTPUT_PATHS['sfs-retro-sample-barcodes']}",
                     stdout="STDOUT",
                     stderr="STDERR"
                 )
@@ -285,7 +297,7 @@ if __name__ == '__main__':
 
             # Check for SFS samples with missing collection date
             id3c_metadata_df = pd.read_csv(OUTPUT_PATHS['id3c-metadata'])
-            sfs_missing_date = id3c_metadata_df[(id3c_metadata_df['source']=='SFS')&(id3c_metadata_df['collection_date'].isna())]
+            sfs_missing_date.append(id3c_metadata_df[(id3c_metadata_df['source']=='SFS')&(id3c_metadata_df['collection_date'].isna())], ignore_index=True)
 
 
         if sfs_missing_date is not None and not sfs_missing_date.empty:

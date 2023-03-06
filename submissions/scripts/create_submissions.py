@@ -65,13 +65,13 @@ def parse_previous_submissions(previous_subs_file: str) -> Set[str]:
 
     Returns a list of sample ids for previously submitted sequences.
     """
-    prev_subs_columns = ['phl_accession', 'sfs_sample_barcode', 'status']
+    prev_subs_columns = ['phl_accession', 'sfs_sample_barcode', 'sfs_sample_identifier', 'status']
     prev_subs = pd.read_csv(previous_subs_file,sep='\t', dtype='string', usecols=prev_subs_columns)
     prev_subs = prev_subs.loc[prev_subs['status'].isin(['submitted', 'pending'])]
-    return set(prev_subs['phl_accession'].combine_first(prev_subs['sfs_sample_barcode']).tolist())
+    return set(prev_subs['phl_accession'].combine_first(prev_subs['sfs_sample_barcode']).combine_first(prev_subs['sfs_sample_identifier']).tolist())
 
 
-def parse_metadata(metadata_file: str, id3c_metadata_file: str = None) -> pd.DataFrame:
+def parse_metadata(metadata_file: str, id3c_metadata_file: str = None, lims_metadata_file: str = None) -> pd.DataFrame:
     """
     Parse the required metadata from the provided *metadata_file* and the
     optional *id3c_metadata_file*.
@@ -98,36 +98,52 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None) -> pd.Dat
     # All WA DOH samples should be baseline surveillance samples
     metadata['baseline_surveillance'] = True
 
+    #id3c_metadata, lims_metadata = None, None
+
+    lims_id3c_metadata = pd.DataFrame()
     if id3c_metadata_file:
         id3c_metadata = pd.read_csv(id3c_metadata_file, dtype='string')
-        # Convert PostgreSQL t/f values to Python boolean
-        d = {'t': True, 'f': False}
-        id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].map(d)
-        #id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].apply(
-            #lambda x: True if x == 't' else False)
 
+        # Convert PostgreSQL t/f values to Python boolean
+        id3c_metadata['baseline_surveillance'] = id3c_metadata['baseline_surveillance'].map({'t': True, 'f': False})
+        # add this column to match format of LIMS metadata
+        id3c_metadata['sfs_identifier_for_doh_reporting'] = id3c_metadata['sfs_sample_barcode']
+
+        lims_id3c_metadata = lims_id3c_metadata.append(id3c_metadata)
+
+    if lims_metadata_file:
+        lims_metadata = pd.read_csv(lims_metadata_file, dtype='string')
+
+         # Convert PostgreSQL t/f values to Python boolean
+        lims_metadata['baseline_surveillance'] = lims_metadata['baseline_surveillance'].map({'t': True, 'f': False})
+
+        lims_id3c_metadata = lims_id3c_metadata.append(lims_metadata)
+
+    if not lims_id3c_metadata.empty:
         # Find rows in external metdata that match ID3C samples
-        external_metadata = metadata.loc[metadata['nwgc_id'].isin(id3c_metadata['nwgc_id'])]
+        external_metadata = metadata.loc[metadata['nwgc_id'].isin(lims_id3c_metadata['nwgc_id'])]
         # Drop collection date, county, swab_type, baseline_surveillance columns since they are expected to come from ID3C
         columns_to_drop = ['collection_date', 'county', 'swab_type', 'baseline_surveillance']
         external_metadata = external_metadata.drop(columns=columns_to_drop)
         # Merge ID3C metadata with the external metadata
-        id3c_metadata = id3c_metadata.merge(external_metadata, on=['nwgc_id'], how='left')
+        lims_id3c_metadata = lims_id3c_metadata.merge(external_metadata, on=['nwgc_id'], how='left')
 
-        # Set lab accession id to the ID3C exported sample barcode to correct
-        # barcodes with any Excel formatting issues
-        id3c_metadata['lab_accession_id'] = id3c_metadata['sfs_identifier_for_doh_reporting']
-        id3c_metadata['sequence_reason'] = id3c_metadata['sequence_reason'].fillna(value='Sentinel surveillance')
-        id3c_metadata['originating_lab'] = 'Seattle Flu Study'
-        id3c_metadata['submission_group'] = 'sfs'
+        # Set lab accession id to the LIMS exported sample barcode to correct
+        # barcodes with any Excel formatting issues. Use full sample identifier if barcode not available.
+        lims_id3c_metadata.loc[lims_id3c_metadata['sfs_sample_barcode'].isna(), 'lab_accession_id'] = lims_id3c_metadata['sfs_sample_identifier']
+        lims_id3c_metadata.loc[lims_id3c_metadata['sfs_sample_barcode'].notna(), 'lab_accession_id'] = lims_id3c_metadata['sfs_sample_barcode']
+
+        lims_id3c_metadata['sequence_reason'] = lims_id3c_metadata['sequence_reason'].fillna(value='Sentinel surveillance')
+        lims_id3c_metadata['originating_lab'] = 'Seattle Flu Study'
+        lims_id3c_metadata['submission_group'] = 'sfs'
         # Label SCAN and Cascadia samples separately since they have different authors than SFS samples
-        id3c_metadata.loc[id3c_metadata['source'].str.lower().str.strip() == 'scan', 'submission_group'] = 'scan'
-        id3c_metadata.loc[id3c_metadata['source'].str.lower().str.strip() == 'cascadia', 'submission_group'] = 'cascadia'
+        lims_id3c_metadata.loc[lims_id3c_metadata['source'].str.lower().str.strip() == 'scan', 'submission_group'] = 'scan'
+        lims_id3c_metadata.loc[lims_id3c_metadata['source'].str.lower().str.strip() == 'cascadia', 'submission_group'] = 'cascadia'
 
         # Drop rows with nwgc_id in the ID3C metadata file
         # Ensures there are no duplicate rows in the final metadata DF
-        metadata = metadata.loc[~metadata['nwgc_id'].isin(id3c_metadata['nwgc_id'])]
-        metadata = pd.concat([metadata, id3c_metadata])
+        metadata = metadata.loc[~metadata['nwgc_id'].isin(lims_id3c_metadata['nwgc_id'])]
+        metadata = pd.concat([metadata, lims_id3c_metadata])
 
     else:
         metadata['sfs_sample_identifier'] = None
@@ -147,7 +163,7 @@ def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
         If no location data is provided, assume sequence is from Washington state
         """
         location = metadata_row['county']
-        state = metadata_row['state']
+        state = metadata_row['state'] if not pd.isna(metadata_row['state']) else 'Washington'
         if pd.isna(location):
             metadata_row['state'] = 'Washington'
         elif pd.notna(state) and state == 'Washington' and location.lower() in washington_counties:
@@ -159,7 +175,8 @@ def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
             metadata_row['state'] = location_correction['state'].values[0]
             metadata_row['county'] = location_correction['county'].values[0]  + ' County'
         else:
-            print(f"Add unknown county to manual_location_annotations.tsv: {location}")
+            print(f"{metadata_row}")
+            print(f"Add unknown county to manual_location_annotations.tsv: {location} for state {metadata_row['state']}")
 
         return metadata_row
 
@@ -437,7 +454,7 @@ def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
 
     voc_report_columns = ['who', 'clade', 'clade_pangolin', 'pangolin', 'collection_date', 'sfs_sample_barcode', 'sfs_collection_barcode']
     sfs_vocs = voc_samples.loc[voc_samples['originating_lab'] == 'Seattle Flu Study']
-    sfs_sources = sfs_vocs['source'].unique()
+    sfs_sources = sfs_vocs['source'].dropna().unique()
 
     for source in sfs_sources:
         source_vocs = sfs_vocs.loc[sfs_vocs['source'] == source][voc_report_columns]
@@ -478,8 +495,9 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
         'Language',
         'Patient Street Address',
         'Patient City',
-        'Patient County',
+        'Patient State',
         'Patient Zip',
+        'Patient County',
         'Patient Phone Number',
         'OK to Contact Patient',
         'Insurance',
@@ -490,6 +508,7 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
         'Specimen ID',
         'Collection Date',
         'Specimen Type',
+        'Specimen Site',
         'Test Name',
         'Result',
         'Notes',
@@ -516,7 +535,8 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
         'sex': 'Patient Sex',
         'street': 'Patient Street Address',
         'city': 'Patient City',
-        'state': 'Patient State',
+        'county': 'Patient County',
+        'state_y': 'Patient State',    # state column is duplicated when LIMS metadata is added
         'zip': 'Patient Zip',
         'phone': 'Patient Phone Number',
         'specimen_collection_site': 'Specimen Site',
@@ -561,7 +581,7 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
             'Race',
             'Ethnicity',
             'Language',
-            'Patient County',
+            #'Patient County',
             'OK to Contact Patient',
             'Insurance',
             'Expedited Partner Therapy Received',
@@ -986,6 +1006,8 @@ if __name__ == '__main__':
         help = "File path to the metadata Excel file")
     parser.add_argument("--id3c-metadata", type=str, required=False,
         help = "File path to the ID3C metadata CSV file")
+    parser.add_argument("--lims-metadata", type=str, required=False,
+        help = "File path to the LIMS metadata CSV file" )
     parser.add_argument("--metrics", type=str, required=True,
         help = "File path to the TSV of assembly metrics from NWGC")
     parser.add_argument("--nextclade", type=str, required=True,
@@ -1014,7 +1036,7 @@ if __name__ == '__main__':
 
     prev_subs = parse_previous_submissions(args.previous_submissions)
 
-    metadata = parse_metadata(args.metadata, args.id3c_metadata)
+    metadata = parse_metadata(args.metadata, args.id3c_metadata, args.lims_metadata)
     metadata = standardize_metadata(metadata)
     metadata = add_assembly_metrics(metadata, args.metrics)
     metadata = add_clade_info(metadata, args.nextclade)

@@ -1,41 +1,84 @@
 #!/bin/bash
 #
-# Usage: ./export-id3c-metadata <sfs-sample-barcodes.csv>
+# Usage: ./export-id3c-metadata [--ignore-origin] <sfs-sample-barcodes.csv>
 #
 # Export ID3C metdata for given sample barcodes provided in <sfs-sample-barcodes.csv>
-# The provded CSV should have two columns: `nwgc_id` and `sfs_sample_barcode`
+# The provded CSV should have three columns: `nwgc_id`, `sfs_sample_barcode`, and `sample_origin`
 # Results are printed as a CSV to stdout. You'll likely want to redirect output
 # to a new file.
 #
+# If the [--ignore-origin] flag is used, the script will ignore the `sample_origin` column from
+# the input file. The default behavior is to filter out records with `sample_origin` not
+# ending in "_retro".
 #
 set -euo pipefail
 
-if [ -z ${1+x} ]; then
-    echo "A positional <sfs-sample-barcodes.csv> is required."
-    exit 1
-fi
+main(){
+    local IGNORE_ORIGIN=0
 
-columns=$(head -n1 $1)
-expected_columns="nwgc_id,sfs_sample_barcode,sample_origin"
-if [ "$columns" != "$expected_columns" ]; then
-    echo "Error: CSV columns do not match expected columns «"$expected_columns"»." >&2
-    exit
-fi
+    for arg; do
+        case "$arg" in
+            -h|--help)
+                usage
+                exit
+                ;;
+            --ignore-origin)
+                IGNORE_ORIGIN=1
+                shift 1;;
+            *)
+        esac
+    done
 
-psql --quiet --no-align --tuples-only --set ON_ERROR_STOP= <<<"
-    create temp table batch(nwgc_id text, sfs_sample_barcode citext, sample_origin text);
-    \copy batch ("$columns") from '"$1"' csv header
+    if [ -z ${1+x} ]; then
+        echo "A positional <sfs-sample-barcodes.csv> is required."
+        exit 1
+    fi
 
-    delete from batch where sample_origin not like '%_retro';
+    columns=$(head -n1 $1)
+    expected_columns="nwgc_id,sfs_sample_barcode,sample_origin"
+    if [ "$columns" != "$expected_columns" ]; then
+        echo "Error: CSV columns do not match expected columns «"$expected_columns"»." >&2
+        exit
+    fi
 
-    create temp view batch_export as (
-        select
-            nwgc_id,
-            shipping.genome_submission_metadata_v1.*
-        from batch
-        left join shipping.genome_submission_metadata_v1 on batch.sfs_sample_barcode in (genome_submission_metadata_v1.sfs_sample_barcode, genome_submission_metadata_v1.sfs_collection_barcode)
-        order by nwgc_id
-    );
+    local drop_non_retros=""
+    if [[ $IGNORE_ORIGIN -eq 0 ]]; then
+        drop_non_retros="delete from batch where sample_origin not like '%_retro';"
+    fi
 
-    \copy (select * from batch_export) to pstdout with csv header
-"
+    psql --quiet --no-align --tuples-only --set ON_ERROR_STOP= <<<"
+        create temp table batch(nwgc_id text, sfs_sample_barcode citext, sample_origin text);
+        \copy batch ("$columns") from '"$1"' csv header;
+
+        "$drop_non_retros"
+
+        create temp view batch_export as (
+            select
+                nwgc_id,
+                shipping.genome_submission_metadata_v1.*
+            from batch
+            left join shipping.genome_submission_metadata_v1 on batch.sfs_sample_barcode in (genome_submission_metadata_v1.sfs_sample_barcode, genome_submission_metadata_v1.sfs_collection_barcode)
+            order by nwgc_id
+        );
+
+        \copy (select * from batch_export) to pstdout with csv header;
+    "
+}
+
+# Print the embedded usage at the top of this file.
+usage() {
+    local line
+    while read -r line; do
+        if [[ $line =~ ^#! ]]; then
+            continue
+        elif [[ $line =~ ^# ]]; then
+            line="${line/##/}"
+            line="${line/# /}"
+            echo "$line"
+        else
+            break
+        fi
+    done < "$0"
+}
+
+main "$@"

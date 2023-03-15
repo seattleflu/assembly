@@ -271,6 +271,7 @@ if __name__ == '__main__':
             f"--output-dir {output_batch_dir} \\\n"
             f"--strain-id {next_avail_strain_id} \\\n"
             f"--metrics {OUTPUT_PATHS['metrics']} \\\n"
+            f"--test-name mips \\\n"
             f"--gisaid-username <your username> \n"
         )
     else:

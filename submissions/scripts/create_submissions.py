@@ -516,7 +516,7 @@ def create_sample_status_report(metadata: pd.DataFrame, output_dir: Path, batch_
     sample_status_columns = ['nwgc_id', 'status', 'percent_ns']
     metadata[sample_status_columns].to_csv(output_dir / f'{batch_name}_sample_status.csv', index=False)
 
-def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path, batch_name: str) -> None:
+def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path, batch_name: str, test_name: str) -> None:
     """
     Create CSV report of sequences for Oregon samples in *metadata*, to be submitted to OR DOH via SFT.
     """
@@ -619,7 +619,7 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
         doh_report['Facility Zip'] = '98195'
         doh_report['Facility Phone'] = '206-616-5859'
         doh_report['Date/Time of Message'] = datetime.now().strftime('%Y%m%d')
-        doh_report['Test Name'] = 'COVSEQ'
+        doh_report['Test Name'] = test_name.upper()
         doh_report['Specimen Type'] = 'Swab of internal nose'
 
         blank_fields = [
@@ -766,7 +766,7 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
 
 
 def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Path,
-                             batch_name: str, submitter: str) -> None:
+                             batch_name: str, submitter: str, test_name: str) -> None:
     """
     Create the CSV and FASTA files needed for submitting sequences to GISAID.
     Follows the bulk upload CSV format required by GISAID.
@@ -882,7 +882,12 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
     gisaid_metadata['covv_patient_age'] = 'unknown'
     gisaid_metadata['covv_patient_status'] = 'unknown'
     gisaid_metadata['covv_seq_technology'] = 'Illumina Nextseq'
-    gisaid_metadata['covv_assembly_method'] = 'Northwest Genomics Center Viral Pipeline'
+    if test_name.lower()=='mips':
+        gisaid_metadata['covv_assembly_method'] = 'Brotman Baty Institute Viral MIP Sequencing'
+    elif test_name.lower()=='covseq':
+        gisaid_metadata['covv_assembly_method'] = 'Northwest Genomics Center Viral Pipeline'
+    else:
+        raise ValueError(f"Invalid test_name: {test_name}")
     gisaid_metadata['covv_subm_lab'] = SFS
     gisaid_metadata['covv_subm_lab_addr'] = lab_addresses[SFS]
 
@@ -1077,6 +1082,9 @@ if __name__ == '__main__':
         help = "File path to CSV of NWGC ids to exclude in from variants of concern")
     parser.add_argument("--vadr-dir", type=str, required=True,
         help = "Path to directory of VADR output files")
+    parser.add_argument("--test-name", type=str, required=True,
+        choices=['covseq', 'mips'],
+        help = "Test name (covseq or mips)")
 
     args = parser.parse_args()
 
@@ -1127,7 +1135,7 @@ if __name__ == '__main__':
 
     create_sample_status_report(metadata, output_dir, batch_name)
     create_wa_doh_report(metadata, args.nextclade, output_dir, batch_name)
-    create_or_doh_report(metadata, args.nextclade, output_dir, batch_name)
+    create_or_doh_report(metadata, args.nextclade, output_dir, batch_name, args.test_name)
 
     # Only create submissions for sequences that have status "submitted"
     submit_metadata = metadata.loc[metadata['status'] == 'submitted']
@@ -1135,7 +1143,7 @@ if __name__ == '__main__':
     if submit_metadata.empty:
         sys.exit(f"No new submissions:\n {metadata.groupby(['status'])['status'].count()}")
 
-    create_gisaid_submission(submit_metadata, args.fasta, output_dir, batch_name, args.gisaid_username)
+    create_gisaid_submission(submit_metadata, args.fasta, output_dir, batch_name, args.gisaid_username, args.test_name)
 
     # Only create NCBI submissions for sequences that passed VADR
     failed_nwgc_ids = [parse_fasta_id(id) for id in text_to_list(vadr_dir / 'genbank.vadr.fail.list')]

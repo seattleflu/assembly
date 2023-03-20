@@ -100,6 +100,9 @@ def parse_metadata_bbi(metrics_file: str, id3c_metadata_file: str = None, lims_m
 
     metadata['originating_lab'] = 'Seattle Flu Study'
     metadata['submission_group'] = 'sfs'
+    # Label SCAN and Cascadia samples separately since they have different authors than SFS samples
+    metadata.loc[metadata['source'].str.lower().str.strip() == 'scan', 'submission_group'] = 'scan'
+    metadata.loc[metadata['source'].str.lower().str.strip() == 'cascadia', 'submission_group'] = 'cascadia'
 
     metadata.loc[metadata['lab_accession_id'].str.endswith('-pos-con'), ['project', 'originating_lab']] = 'sentinel'
 
@@ -619,7 +622,8 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
         doh_report['Facility Zip'] = '98195'
         doh_report['Facility Phone'] = '206-616-5859'
         doh_report['Date/Time of Message'] = datetime.now().strftime('%Y%m%d')
-        doh_report['Test Name'] = test_name.upper()
+        assert test_name in ['COVSEQ', 'MIPsSEQ'], f'Invalid test name: {test_name}'
+        doh_report['Test Name'] = test_name
         doh_report['Specimen Type'] = 'Swab of internal nose'
 
         blank_fields = [
@@ -804,13 +808,8 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
                       "Please add the address to `submissions/source-data/lab_addresses.tsv`")
 
         # Assign authors based on submission group
-        row['covv_authors'] = authors['wa-doh']
-        if row['submission_group'] != 'wa-doh':
-
-            if row['submission_group'] == 'scan':
-                row['covv_authors'] = authors['scan']
-            else:
-                row['covv_authors'] = authors['sfs']
+        assert row['submission_group'] in ['wa-doh', 'scan', 'sfs', 'cascadia', 'altius'], f'Invalid submission group: {row["submission_group"]}'
+        row['covv_authors'] = authors[row['submission_group']]
 
         # Add `hCoV-19/` prefix per GISAID requirements
         row['covv_virus_name'] = f'hCoV-19/{row["strain_name"]}'
@@ -882,9 +881,9 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
     gisaid_metadata['covv_patient_age'] = 'unknown'
     gisaid_metadata['covv_patient_status'] = 'unknown'
     gisaid_metadata['covv_seq_technology'] = 'Illumina Nextseq'
-    if test_name.lower()=='mips':
+    if test_name=='MIPsSEQ':
         gisaid_metadata['covv_assembly_method'] = 'Brotman Baty Institute Viral MIP Sequencing'
-    elif test_name.lower()=='covseq':
+    elif test_name=='COVSEQ':
         gisaid_metadata['covv_assembly_method'] = 'Northwest Genomics Center Viral Pipeline'
     else:
         raise ValueError(f"Invalid test_name: {test_name}")
@@ -1083,8 +1082,8 @@ if __name__ == '__main__':
     parser.add_argument("--vadr-dir", type=str, required=True,
         help = "Path to directory of VADR output files")
     parser.add_argument("--test-name", type=str, required=True,
-        choices=['covseq', 'mips'],
-        help = "Test name (covseq or mips)")
+        choices=['COVSEQ', 'MIPsSEQ'],
+        help = "Test name (covseq or mipsseq)")
 
     args = parser.parse_args()
 

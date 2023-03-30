@@ -20,7 +20,7 @@ dependencies:
   - python=3.6
   - r-essentials
   - rpy2
-  - samtools
+  - samtools=1.9
   - seaborn
   - seqkit
   - snakemake

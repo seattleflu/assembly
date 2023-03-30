@@ -10,8 +10,8 @@ data/
 test_data/
 
 # Index output files
-references/*.bt2
-references/*.fai
+references/**/*.bt2
+references/**/*.fai
 
 # Generated files
 .snakemake

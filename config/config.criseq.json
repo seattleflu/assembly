@@ -1,0 +1,52 @@
+{
+  "fastq_directory": "input/demuxed",
+  "ignored_samples": {
+      "Undetermined": {}
+  },
+  "raw_read_length": 150,
+  "reference_viruses": {
+    "flu-a": {},
+    "flu-a-h1n1": {},
+    "flu-b": {},
+    "flu-b-brisbane": {},
+    "flu-b-colorado": {},
+    "flu-b-washington": {},
+    "rsv-a": {},
+    "rsv-b": {},
+    "sars-cov-2": {}
+  },
+  "sample_reference_pairs": {},
+  "barcode_match": {
+    "mapper_filepath": "sample-target-match.xls",
+    "nwgc_column": "nwgc_sample_id",
+    "sfs_column": "sfs_specimen_id",
+    "key_value_filepath": "key_value.txt"
+  },
+  "params" :
+    {
+      "trimmomatic" :
+        {
+          "paired_end" : "PE",
+          "adapters" : "illumina-adapters.fasta",
+          "illumina_clip" : "1:30:10",
+          "window_size" : "5",
+          "trim_qscore" : "20",
+          "minimum_length" : "50"
+        },
+      "bowtie2" :
+        {
+          "threads" : "4",
+          "all" : "-a"
+        },
+      "mpileup" :
+        {
+          "depth" : "1000000"
+        },
+      "varscan" :
+        {
+          "min_cov" : "20",
+          "snp_qual_threshold" : "30",
+          "snp_frequency" : "0.50"
+        }
+    }
+}

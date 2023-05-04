@@ -177,7 +177,7 @@ def process_with_vadr(input_fasta:Path, output_batch_dir:Path, interactive:bool=
 
 
 
-def sequence_metrics(sequence: str, fasta_id: str) -> dict:
+def sequence_metrics(sequence: str, fasta_id: str, ) -> dict:
     """
     Calculate basic metrics from sars-cov-2 sequence
     """
@@ -192,8 +192,8 @@ def sequence_metrics(sequence: str, fasta_id: str) -> dict:
         'COUNT_T': sequence.count("T"),
         'COUNT_N': n_count,
         'CONSENSUS_FASTA_LENGTH': len(sequence),
-        'PCT_N_MAPPED': n_count / seq_length,
+        'PCT_N_MAPPED': (n_count / seq_length) * 100,
         'REFERENCE_LENGTH': ref_length,
-        'PCT_N_REFERENCE': n_count / ref_length,
+        'PCT_N_REFERENCE':(n_count / ref_length) * 100,
     }
     return metrics

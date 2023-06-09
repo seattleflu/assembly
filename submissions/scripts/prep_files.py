@@ -465,6 +465,7 @@ if __name__ == '__main__':
             f"--vadr-dir {OUTPUT_PATHS['vadr-dir']} \\\n"
             f"--output-dir {output_batch_dir} \\\n"
             f"--strain-id {next_avail_strain_id} \\\n"
+            f"--test-name COVSEQ"
             f"--gisaid-username <your username> \n"
         )
     else:

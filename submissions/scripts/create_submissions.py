@@ -71,10 +71,49 @@ def parse_previous_submissions(previous_subs_file: str) -> Set[str]:
     return set(prev_subs['phl_accession'].combine_first(prev_subs['sfs_sample_barcode']).combine_first(prev_subs['sfs_sample_identifier']).tolist())
 
 
+def parse_metadata_bbi(metrics_file: str, id3c_metadata_file: str = None, lims_metadata_file: str = None) -> pd.DataFrame:
+    """
+    Parse the required metadata from *id3c_metadata_file* and/or *lims_metadata_file* CSVs.
+    """
+    # Metrics file should contain all records, including controls, so is used to initialize metatadata dataframe
+    metrics = pd.read_csv(metrics_file, sep='\t')
+    metrics.rename(columns={'SampleId': 'lab_accession_id'}, inplace=True)
+
+    metadata = metrics[['lab_accession_id']]
+
+    lims_metadata = pd.read_csv(lims_metadata_file, dtype='string')
+    id3c_metadata = pd.read_csv(id3c_metadata_file, dtype='string')
+    id3c_metadata['sfs_identifier_for_doh_reporting'] = id3c_metadata['sfs_sample_barcode']
+
+    lims_id3c_metadata = pd.concat([lims_metadata, id3c_metadata])
+
+    # match to metadata based on sample barcode, collection barcode, and concatenate into
+    # single dataframe along with those that had no match (which may include control samples)
+    metadata_1 = pd.merge(metadata, lims_id3c_metadata, how="inner", left_on="lab_accession_id", right_on='sfs_sample_barcode')
+    metadata_2 = pd.merge(metadata, lims_id3c_metadata, how="inner", left_on="lab_accession_id", right_on='sfs_collection_barcode')
+    metadata_missing = metadata[(~metadata['lab_accession_id'].isin(metadata_1['lab_accession_id']))&(~metadata['lab_accession_id'].isin(metadata_2['lab_accession_id']))]
+    metadata = pd.concat([metadata_1, metadata_2, metadata_missing], ignore_index=True)
+
+    metadata['baseline_surveillance'] = metadata['baseline_surveillance'].map({'t': True, 'f': False})
+    metadata.loc[metadata['source'].str.lower()=='cascadia', 'sequence_reason'] = 'Other'
+    metadata['sequence_reason'] = metadata['sequence_reason'].fillna(value='Sentinel surveillance')
+
+    metadata['originating_lab'] = 'Seattle Flu Study'
+    metadata['submission_group'] = 'sfs'
+    # Label SCAN and Cascadia samples separately since they have different authors than SFS samples
+    metadata.loc[metadata['source'].str.lower().str.strip() == 'scan', 'submission_group'] = 'scan'
+    metadata.loc[metadata['source'].str.lower().str.strip() == 'cascadia', 'submission_group'] = 'cascadia'
+
+    metadata.loc[metadata['lab_accession_id'].str.endswith('-pos-con'), ['project', 'originating_lab']] = 'sentinel'
+
+    # Sort by lab_accession_id to ensure order of metadata
+    return metadata.sort_values('lab_accession_id', ascending=True, ignore_index=True)
+
+
 def parse_metadata(metadata_file: str, id3c_metadata_file: str = None, lims_metadata_file: str = None) -> pd.DataFrame:
     """
     Parse the required metadata from the provided *metadata_file* and the
-    optional *id3c_metadata_file*.
+    optional *id3c_metadata_file* and/or *lims_metadata_file*.
 
     The *metadata_file* is expected to be an XLSX file with a sheet named 'Metadata`
     and the optional *id3c_metadata_file* is expected to be a CSV file.
@@ -120,13 +159,23 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None, lims_meta
         lims_id3c_metadata = lims_id3c_metadata.append(lims_metadata)
 
     if not lims_id3c_metadata.empty:
-        # Find rows in external metdata that match ID3C samples
-        external_metadata = metadata.loc[metadata['nwgc_id'].isin(lims_id3c_metadata['nwgc_id'])]
         # Drop collection date, county, swab_type, baseline_surveillance columns since they are expected to come from ID3C
         columns_to_drop = ['collection_date', 'county', 'swab_type', 'baseline_surveillance']
-        external_metadata = external_metadata.drop(columns=columns_to_drop)
+        external_metadata = metadata.drop(columns=columns_to_drop)
+
         # Merge ID3C metadata with the external metadata
-        lims_id3c_metadata = lims_id3c_metadata.merge(external_metadata, on=['nwgc_id'], how='left')
+        lims_id3c_metadata.drop(columns=['nwgc_id'], inplace=True)
+
+        external_metadata['lab_accession_id'] = external_metadata['lab_accession_id'].str.lower()
+        lims_id3c_metadata['sfs_sample_barcode'] = lims_id3c_metadata['sfs_sample_barcode'].str.lower()
+        lims_id3c_metadata['sfs_collection_barcode'] = lims_id3c_metadata['sfs_collection_barcode'].str.lower()
+
+        # match to metadata based on sample barcode, collection barcode, and concatenate into
+        # single dataframe along with those that had no match (which may include control samples)
+        metadata_1 = pd.merge(external_metadata, lims_id3c_metadata, how="inner", left_on="lab_accession_id", right_on='sfs_sample_barcode')
+        metadata_2 = pd.merge(external_metadata, lims_id3c_metadata, how="inner", left_on="lab_accession_id", right_on='sfs_collection_barcode')
+        metadata_missing = external_metadata[(~external_metadata['lab_accession_id'].isin(metadata_1['lab_accession_id']))&(~external_metadata['lab_accession_id'].isin(metadata_2['lab_accession_id']))]
+        lims_id3c_metadata = pd.concat([metadata_1, metadata_2, metadata_missing], ignore_index=True)
 
         # Set lab accession id to the LIMS exported sample barcode to correct
         # barcodes with any Excel formatting issues. Use full sample identifier if barcode not available.
@@ -139,18 +188,13 @@ def parse_metadata(metadata_file: str, id3c_metadata_file: str = None, lims_meta
         # Label SCAN and Cascadia samples separately since they have different authors than SFS samples
         lims_id3c_metadata.loc[lims_id3c_metadata['source'].str.lower().str.strip() == 'scan', 'submission_group'] = 'scan'
         lims_id3c_metadata.loc[lims_id3c_metadata['source'].str.lower().str.strip() == 'cascadia', 'submission_group'] = 'cascadia'
-
-        # Drop rows with nwgc_id in the ID3C metadata file
-        # Ensures there are no duplicate rows in the final metadata DF
-        metadata = metadata.loc[~metadata['nwgc_id'].isin(lims_id3c_metadata['nwgc_id'])]
-        metadata = pd.concat([metadata, lims_id3c_metadata])
-
     else:
         metadata['sfs_sample_identifier'] = None
         metadata['sfs_sample_barcode'] = None
+        return metadata.sort_values('nwgc_id', ascending=True, ignore_index=True)
 
     # Sort by NWGC ID to ensure order of metadata
-    return metadata.sort_values('nwgc_id', ascending=True, ignore_index=True)
+    return lims_id3c_metadata.sort_values('nwgc_id', ascending=True, ignore_index=True)
 
 
 def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
@@ -175,7 +219,6 @@ def standardize_metadata(metadata: pd.DataFrame) -> pd.DataFrame:
             metadata_row['state'] = location_correction['state'].values[0]
             metadata_row['county'] = location_correction['county'].values[0]  + ' County'
         else:
-            print(f"{metadata_row}")
             print(f"Add unknown county to manual_location_annotations.tsv: {location} for state {metadata_row['state']}")
 
         return metadata_row
@@ -205,12 +248,12 @@ def standardize_date(date_string: str, format: str) -> Optional[str]:
         return None
 
 
-def add_assembly_metrics(metadata: pd.DataFrame, metrics_file: str) -> pd.DataFrame:
+def add_assembly_metrics(metadata: pd.DataFrame, metrics_file: str, metadata_id: str = 'nwgc_id', metrics_id: str = 'nwgc_id') -> pd.DataFrame:
     """
     Parse assembly metrics from *metrics_file* and join with *metadata*.
     """
     assembly_metrics = parse_assembly_metrics(metrics_file)
-    return metadata.merge(assembly_metrics, on='nwgc_id', how='left')
+    return metadata.merge(assembly_metrics, left_on=metadata_id, right_on=metrics_id, how='left')
 
 
 def parse_assembly_metrics(metrics_file: str) -> pd.DataFrame:
@@ -259,7 +302,7 @@ def parse_assembly_metrics(metrics_file: str) -> pd.DataFrame:
         'PCT_N_MAPPED',
         'REFERENCE_LENGTH',
         'PCT_N_REFERENCE',
-        'EXTRA_COLUMN'
+        #'EXTRA_COLUMN'
     ]
 
     # Map of needed metrics columns to final column names
@@ -270,15 +313,13 @@ def parse_assembly_metrics(metrics_file: str) -> pd.DataFrame:
         'PCT_N_MAPPED': 'percent_ns',
     }
 
-    # The TSV sometimes has an extra column at the end
-    # Use header/skiprows/names options to ensure correct columns in DataFrame
     assembly_metrics = pd.read_csv(metrics_file, sep='\t', dtype='string',
-                                   header=None, skiprows=1, names=metric_column_names)
+                                   usecols=metric_column_names)
 
     return assembly_metrics[metrics_column_map.keys()].rename(columns=metrics_column_map)
 
 
-def add_clade_info(metadata: pd.DataFrame, nextclade_file: str) -> pd.DataFrame:
+def add_clade_info(metadata: pd.DataFrame, nextclade_file: str, metadata_id: str = 'nwgc_id', nextclade_id_delimiter: str = None) -> pd.DataFrame:
     """
     Parse clade info from *nextclade_file* and join it with the corresponding
     sample in *metadata*.
@@ -288,10 +329,22 @@ def add_clade_info(metadata: pd.DataFrame, nextclade_file: str) -> pd.DataFrame:
 
     Joins with metadata using the <nwgc_id>.
     """
-    nextclade = pd.read_csv(nextclade_file, sep='\t', usecols=['seqName', 'clade', 'Nextclade_pango'])
-    nextclade['nwgc_id'] = nextclade['seqName'].apply(lambda s: s.split(".")[0].split('_')[1])
+    nextclade = pd.read_csv(nextclade_file, sep='\t')
+
+    # NextClade changed the format of the `clade` column, but we'll continue using the old format
+    # now in `clade_legacy`.
+    if 'clade_legacy' in nextclade.columns:
+        nextclade.drop(columns='clade', inplace=True)
+        nextclade.rename(columns={'clade_legacy': 'clade'}, inplace=True)
+
+    # Check format of seqName in NextClade file and parse accordingly
+    if nextclade_id_delimiter is not None:
+        nextclade['nwgc_id'] = nextclade['seqName'].apply(lambda s: s.split(nextclade_id_delimiter)[0])
+    else:
+        nextclade['nwgc_id'] = nextclade['seqName'].apply(lambda s: s.split(".")[0].split('_')[1])
+
     nextclade.rename(columns={"Nextclade_pango": "pangolin"}, inplace=True)
-    return metadata.merge(nextclade[['nwgc_id', 'clade', 'pangolin']], on='nwgc_id', how='left')
+    return metadata.merge(nextclade[['nwgc_id', 'clade', 'pangolin']], left_on=metadata_id, right_on='nwgc_id', how='left')
 
 
 def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str]) -> pd.DataFrame:
@@ -326,7 +379,7 @@ def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str]) -> pd.DataF
     metadata.loc[metadata['project'].str.lower() == 'sentinel', 'status'] = 'control'
 
     # Label samples with >10% Ns in the genome
-    metadata.loc[pd.to_numeric(metadata['percent_ns'], errors='coerce') > 10, 'status'] = '>10% Ns'
+    metadata.loc[pd.to_numeric(metadata['percent_ns'], errors='coerce') > 0.10, 'status'] = '>10% Ns'
 
     # Find samples without a genome, i.e. 'length' is null
     no_genome = pd.isna(metadata['length'])
@@ -419,13 +472,16 @@ def create_summary_reports(metadata: pd.DataFrame, excluded_vocs: str,
     counts_by_source = all_samples.groupby(['source']).size().reset_index(name='counts')
     counts_by_source.to_csv(output_dir / f'{batch_name}_sample_count_by_source.tsv', index=False, sep='\t')
 
-    hct_date_range = all_samples[all_samples['source'].str.lower()=='hct'][['collection_date']].dropna().agg(['min','max']).transpose()
-    hct_date_range['source'] = 'HCT'
+    sample_date_range = all_samples.groupby(['source']).agg({'collection_date': ['min', 'max']})
+    sample_date_range.columns = list(map(''.join, sample_date_range.columns.values))
+    sample_date_range['source'] = sample_date_range.index
 
-    all_date_range = all_samples[['collection_date']].dropna().agg(['min','max']).transpose()
-    all_date_range['source'] = 'All'
+    sample_date_range = sample_date_range.append({'source': 'All',
+        'collection_datemin': all_samples['collection_date'].dropna().min(),
+        'collection_datemax': all_samples['collection_date'].dropna().max()
+    }, ignore_index=True)
 
-    pd.concat([hct_date_range, all_date_range]).to_csv(output_dir / f'{batch_name}_sample_date_range.tsv', index=False, sep='\t')
+    sample_date_range.to_csv(output_dir / f'{batch_name}_sample_date_range.tsv', index=False, sep='\t')
 
 
 def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
@@ -443,7 +499,7 @@ def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
     vocs = vocs.groupby(['clade'], as_index = False).agg({'clade_pangolin': ';'.join, 'who': lambda x:';'.join(set(x))})
     exclude_ids = text_to_list(excluded_vocs)
 
-    voc_samples = metadata.loc[(metadata['clade'].isin(vocs['clade'])) & (~metadata['nwgc_id'].isin(exclude_ids))]
+    voc_samples = metadata.loc[(metadata['clade'].isin(vocs['clade'])) & (~metadata['nwgc_id'].isna()) & (~metadata['nwgc_id'].isin(exclude_ids))]
     voc_samples = voc_samples.merge(vocs, on=['clade'], how='inner')
 
     all_vocs_counts = voc_samples.groupby(['clade', 'clade_pangolin', 'who']).size().reset_index(name='counts')
@@ -470,7 +526,7 @@ def create_sample_status_report(metadata: pd.DataFrame, output_dir: Path, batch_
     sample_status_columns = ['nwgc_id', 'status', 'percent_ns']
     metadata[sample_status_columns].to_csv(output_dir / f'{batch_name}_sample_status.csv', index=False)
 
-def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path, batch_name: str) -> None:
+def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path, batch_name: str, test_name: str) -> None:
     """
     Create CSV report of sequences for Oregon samples in *metadata*, to be submitted to OR DOH via SFT.
     """
@@ -548,7 +604,7 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
     pango_lineages['nwgc_id'] = pango_lineages['seqName'].apply(parse_fasta_id)
 
     # Only submit sequences that are not controls, not duplicates, and not missing collection date
-    not_control = metadata['originating_lab'] != 'sentinel'
+    not_control = metadata['status'] != 'control'
     not_duplicate = metadata['status'] != 'dropped duplicate'
     not_missing_date = metadata['status'] != 'missing collection date'
 
@@ -573,7 +629,8 @@ def create_or_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
         doh_report['Facility Zip'] = '98195'
         doh_report['Facility Phone'] = '206-616-5859'
         doh_report['Date/Time of Message'] = datetime.now().strftime('%Y%m%d')
-        doh_report['Test Name'] = 'COVSEQ'
+        assert test_name in ['COVSEQ', 'MIPsSEQ'], f'Invalid test name: {test_name}'
+        doh_report['Test Name'] = test_name
         doh_report['Specimen Type'] = 'Swab of internal nose'
 
         blank_fields = [
@@ -673,7 +730,7 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
     pango_lineages['nwgc_id'] = pango_lineages['seqName'].apply(parse_fasta_id)
 
     # Only submit sequences that are not controls, not duplicates, and not missing collection date
-    not_control = metadata['originating_lab'] != 'sentinel'
+    not_control = metadata['status'] != 'control'
     not_duplicate = metadata['status'] != 'dropped duplicate'
     not_missing_date = metadata['status'] != 'missing collection date'
     # WA DOH asked us only include sequences from Washington state as of Oct 12, 2021
@@ -720,7 +777,7 @@ def create_wa_doh_report(metadata:pd.DataFrame, pangolin: str, output_dir: Path,
 
 
 def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Path,
-                             batch_name: str, submitter: str) -> None:
+                             batch_name: str, submitter: str, test_name: str) -> None:
     """
     Create the CSV and FASTA files needed for submitting sequences to GISAID.
     Follows the bulk upload CSV format required by GISAID.
@@ -758,13 +815,8 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
                       "Please add the address to `submissions/source-data/lab_addresses.tsv`")
 
         # Assign authors based on submission group
-        row['covv_authors'] = authors['wa-doh']
-        if row['submission_group'] != 'wa-doh':
-
-            if row['submission_group'] == 'scan':
-                row['covv_authors'] = authors['scan']
-            else:
-                row['covv_authors'] = authors['sfs']
+        assert row['submission_group'] in ['wa-doh', 'scan', 'sfs', 'cascadia', 'altius'], f'Invalid submission group: {row["submission_group"]}'
+        row['covv_authors'] = authors[row['submission_group']]
 
         # Add `hCoV-19/` prefix per GISAID requirements
         row['covv_virus_name'] = f'hCoV-19/{row["strain_name"]}'
@@ -835,8 +887,14 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
     gisaid_metadata['covv_gender'] = 'unknown'
     gisaid_metadata['covv_patient_age'] = 'unknown'
     gisaid_metadata['covv_patient_status'] = 'unknown'
-    gisaid_metadata['covv_seq_technology'] = 'Illumina Nextseq'
-    gisaid_metadata['covv_assembly_method'] = 'Northwest Genomics Center Viral Pipeline'
+    if test_name=='MIPsSEQ':
+        gisaid_metadata['covv_assembly_method'] = 'Brotman Baty Institute Viral MIP Sequencing'
+        gisaid_metadata['covv_seq_technology'] = 'Illumina MiSeq'
+    elif test_name=='COVSEQ':
+        gisaid_metadata['covv_assembly_method'] = 'Northwest Genomics Center Viral Pipeline'
+        gisaid_metadata['covv_seq_technology'] = 'Illumina Nextseq'
+    else:
+        raise ValueError(f"Invalid test_name: {test_name}")
     gisaid_metadata['covv_subm_lab'] = SFS
     gisaid_metadata['covv_subm_lab_addr'] = lab_addresses[SFS]
 
@@ -855,8 +913,13 @@ def parse_fasta_id(record_id: str) -> str:
 
     Expects the *record_id* to have the format:
     `Consensus_<nwgc_id>.consensus_threshold_0.5_quality_20`
+    or
+    `<nwgc_id>|...`
     """
-    return record_id.split('.')[0].split('_')[1]
+    if '|' in record_id:
+        return record_id.split('|')[0]
+    else:
+        return record_id.split('.')[0].split('_')[1]
 
 
 def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
@@ -1002,7 +1065,7 @@ if __name__ == '__main__':
     )
     parser.add_argument("--batch-name", type=str, required=True,
         help = "The name for this batch of sequences, usually the date of sequence release, e.g. `20210701`")
-    parser.add_argument("--metadata", type=str, required=True,
+    parser.add_argument("--metadata", type=str, required=False,
         help = "File path to the metadata Excel file")
     parser.add_argument("--id3c-metadata", type=str, required=False,
         help = "File path to the ID3C metadata CSV file")
@@ -1026,6 +1089,9 @@ if __name__ == '__main__':
         help = "File path to CSV of NWGC ids to exclude in from variants of concern")
     parser.add_argument("--vadr-dir", type=str, required=True,
         help = "Path to directory of VADR output files")
+    parser.add_argument("--test-name", type=str, required=True,
+        choices=['COVSEQ', 'MIPsSEQ'],
+        help = "Test name (covseq or mipsseq)")
 
     args = parser.parse_args()
 
@@ -1036,10 +1102,26 @@ if __name__ == '__main__':
 
     prev_subs = parse_previous_submissions(args.previous_submissions)
 
-    metadata = parse_metadata(args.metadata, args.id3c_metadata, args.lims_metadata)
+    # Determine whether to process submissions using NWGC or BBI pipeline based on
+    # whether NWGC metadata file is provided or not
+    metadata_source = None
+    if args.metadata:
+        metadata_source = 'nwgc'
+        metadata = parse_metadata(args.metadata, args.id3c_metadata, args.lims_metadata)
+    elif args.id3c_metadata or args.lims_metadata:
+        metadata_source = 'bbi'
+        metadata = parse_metadata_bbi(args.metrics, args.id3c_metadata, args.lims_metadata)
+    else:
+        raise Exception(f"Metadata is required.")
+
     metadata = standardize_metadata(metadata)
-    metadata = add_assembly_metrics(metadata, args.metrics)
-    metadata = add_clade_info(metadata, args.nextclade)
+    if metadata_source == 'bbi':
+        metadata = add_assembly_metrics(metadata, args.metrics, metadata_id='lab_accession_id')
+        metadata = add_clade_info(metadata, args.nextclade, metadata_id='lab_accession_id', nextclade_id_delimiter='|')
+    else:
+        metadata = add_assembly_metrics(metadata, args.metrics)
+        metadata = add_clade_info(metadata, args.nextclade, nextclade_id_delimiter='|')
+
     metadata = add_sequence_status(metadata, prev_subs)
     metadata = assign_strain_identifier(metadata, args.strain_id)
 
@@ -1054,13 +1136,12 @@ if __name__ == '__main__':
 
     create_identifiers_report(metadata, output_dir, batch_name)
 
-    if args.id3c_metadata is not None:
-        create_voc_reports(metadata, args.excluded_vocs, output_dir, batch_name)
-        create_summary_reports(metadata, args.excluded_vocs, output_dir, batch_name)
+    create_voc_reports(metadata, args.excluded_vocs, output_dir, batch_name)
+    create_summary_reports(metadata, args.excluded_vocs, output_dir, batch_name)
 
     create_sample_status_report(metadata, output_dir, batch_name)
     create_wa_doh_report(metadata, args.nextclade, output_dir, batch_name)
-    create_or_doh_report(metadata, args.nextclade, output_dir, batch_name)
+    create_or_doh_report(metadata, args.nextclade, output_dir, batch_name, args.test_name)
 
     # Only create submissions for sequences that have status "submitted"
     submit_metadata = metadata.loc[metadata['status'] == 'submitted']
@@ -1068,7 +1149,7 @@ if __name__ == '__main__':
     if submit_metadata.empty:
         sys.exit(f"No new submissions:\n {metadata.groupby(['status'])['status'].count()}")
 
-    create_gisaid_submission(submit_metadata, args.fasta, output_dir, batch_name, args.gisaid_username)
+    create_gisaid_submission(submit_metadata, args.fasta, output_dir, batch_name, args.gisaid_username, args.test_name)
 
     # Only create NCBI submissions for sequences that passed VADR
     failed_nwgc_ids = [parse_fasta_id(id) for id in text_to_list(vadr_dir / 'genbank.vadr.fail.list')]

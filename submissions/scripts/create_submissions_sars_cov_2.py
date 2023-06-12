@@ -77,9 +77,9 @@ def parse_metadata_bbi(metrics_file: str, id3c_metadata_file: str = None, lims_m
     """
     # Metrics file should contain all records, including controls, so is used to initialize metatadata dataframe
     metrics = pd.read_csv(metrics_file, sep='\t')
-    metrics.rename(columns={'SampleId': 'lab_accession_id'}, inplace=True)
+    metrics.rename(columns={'SampleId': 'LIMS'}, inplace=True)
 
-    metadata = metrics[['lab_accession_id']]
+    metadata = metrics[['LIMS']]
 
     lims_metadata = pd.read_csv(lims_metadata_file, dtype='string')
     id3c_metadata = pd.read_csv(id3c_metadata_file, dtype='string')
@@ -379,7 +379,7 @@ def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str]) -> pd.DataF
     metadata.loc[metadata['project'].str.lower() == 'sentinel', 'status'] = 'control'
 
     # Label samples with >10% Ns in the genome
-    metadata.loc[pd.to_numeric(metadata['percent_ns'], errors='coerce') > 0.10, 'status'] = '>10% Ns'
+    metadata.loc[pd.to_numeric(metadata['percent_ns'], errors='coerce') > 10, 'status'] = '>10% Ns'
 
     # Find samples without a genome, i.e. 'length' is null
     no_genome = pd.isna(metadata['length'])

@@ -71,7 +71,7 @@ def chunk(arr, arr_size):
 
 def get_lims_sequencing_metadata(barcodes: list):
 
-    barcode_lists = list(chunk(barcodes, 100))
+    barcode_lists = list(chunk(barcodes, 10))
 
     result = pd.DataFrame()
 

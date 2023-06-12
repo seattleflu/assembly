@@ -3,7 +3,6 @@ Prepares files and directories for sequencing submissions.
 
 """
 import os
-import re
 import sys
 import argparse
 import tarfile
@@ -13,11 +12,11 @@ import logging
 import pandas as pd
 import conda.cli.python_api as Conda
 import docker
-from openpyxl import load_workbook
 from extract_sfs_identifiers import read_all_identifiers, find_sfs_identifiers
 import requests
 import getpass
 
+from utils import standardize_and_qc_external_metadata
 from export_lims_metadata import add_lims_metadata
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
@@ -57,142 +56,10 @@ def count_s_occurrences(values):
             count += 1
     return count
 
-def standardize_date(date_value):
-    if pd.isna(date_value) or (isinstance(date_value, str) and date_value.lower().strip() == 'na'):
-        return None
-    else:
-        # So far, two date formats have been encountered in metadata Excel files, resulting in different formats in
-        # resulting dataframes. If `date_value` does not match either of these formats, a ValueError exception will be
-        # thrown. If the rejected date is in a usable format, it should be added here.
-        datetime_val = pd.to_datetime(date_value, format='%Y-%m-%d %H:%M:%S', errors="coerce")
-        if pd.isnull(datetime_val):
-            datetime_val = pd.to_datetime(date_value, format='%m/%d/%Y')
-
-        # The minus sign before m and d removes leading zeros, to match the format of the original Excel file.
-        # Note: this may only work on unix, windows may need to use `#` instead of `-`
-        return datetime_val.strftime('%-m/%-d/%Y')
-
-
-def standardize_barcode(barcode):
-    if pd.isna(barcode):
-        return None
-    elif isinstance(barcode, str):
-        standardized_barcode = barcode.strip().lower()
-    elif isinstance(barcode, int):
-        standardized_barcode = str(barcode)
-    else:
-        raise TypeError(f"Barcodes must be type str or int. Invalid type {type(barcode)} on barcode: {barcode}")
-
-    # In addition to standard format, allow barcodes ending in `_exp` which typically don't need to be submitted
-    # but should be confirmed with sequencing team before dropping.
-    if (bool(re.match('^[0-9a-f]{8}$', standardized_barcode)) or
-        bool(re.match('^[0-9a-f]{8}_exp$', standardized_barcode)) or
-        standardized_barcode in ["twist positive", "blank"]):
-        return standardized_barcode
-    else:
-        raise ValueError(f"Identifiers must be hexidecimal barcodes, `blank`, or `twist positive`. Invalid barcode: {standardized_barcode}")
-
-def validate_collection_dates(collection_dates: pd.Series, batch_date: datetime):
-    cutoff_datetime = datetime(2020, 2, 1)
-
-    out_of_range = collection_dates.dropna()[(pd.to_datetime(collection_dates, format='%m/%d/%Y') < cutoff_datetime)|(pd.to_datetime(collection_dates, format='%m/%d/%Y') > batch_date)]
-
-    if not out_of_range.empty:
-        raise Exception(f"Error: Collection date(s) out of range ({cutoff_datetime.strftime('%Y-%m-%d')} to {batch_date.strftime('%Y-%m-%d')}):\n {out_of_range}")
-
-    if len(collection_dates.dropna().unique()) < 2:
-        raise Exception(f"Error: All collection dates values are the same:\n {collection_dates.unique()}")
 
 
 
-def standardize_and_qc_external_metadata(metadata_filename:str, batch_date:datetime):
-    # Standardize and validate barcode and date values on external metadata Excel file. Loads 2 sheets to dataframes
-    # and writes them back to Excel if data passes all checks.
 
-    # Metadata sheet
-    external_metadata_metadata = pd.read_excel(metadata_filename, sheet_name='Metadata', converters={'LIMS':int, 'lab_accession_id':str})
-    external_metadata_metadata['lab_accession_id'] = external_metadata_metadata['lab_accession_id'].str.strip()
-    # only standardize internal barcodes
-    external_metadata_metadata['lab_accession_id'] = external_metadata_metadata.apply(lambda row: standardize_barcode(row['lab_accession_id']) if str(row['Project']).startswith(('starita_bbi_', 'SeattleChildrensDirect_')) else row['lab_accession_id'], axis=1)
-    external_metadata_metadata['collection_date'] = external_metadata_metadata['collection_date'].apply(standardize_date)
-    external_metadata_metadata['Seq date'] = external_metadata_metadata['Seq date'].apply(standardize_date)
-
-    # Set submitting_lab to sentinel for records with Project = sentinel
-    external_metadata_metadata.loc[external_metadata_metadata['Project'].str.lower()=='sentinel', 'submitting_lab'] = 'sentinel'
-
-    # Samplify FC Data sheet
-    external_metadata_samplify_fc_data = pd.read_excel(args.metadata_file, sheet_name='Samplify FC Data', header=1, converters={'Sample ID':int, 'Investigator\'s sample ID':str})
-    external_metadata_samplify_fc_data['Investigator\'s sample ID'] = external_metadata_samplify_fc_data['Investigator\'s sample ID'].str.strip()
-    # only standardize internal barcodes
-    external_metadata_samplify_fc_data['Investigator\'s sample ID'] = external_metadata_samplify_fc_data.apply(lambda row: standardize_barcode(row['Investigator\'s sample ID']) if str(row['Project']).startswith(('starita_bbi_', 'SeattleChildrensDirect_')) else row['Investigator\'s sample ID'], axis=1)
-    external_metadata_samplify_fc_data['Collection date'] = external_metadata_samplify_fc_data['Collection date'].apply(standardize_date)
-
-    # Only the collection date from the Metadata sheet is used for creating submission files.
-    # Validating to confirm no collection dates prior to Feb 2020 and not all dates are identical.
-    validate_collection_dates(external_metadata_metadata['collection_date'], batch_date)
-
-    sentinel_ids = ['blank', 'twist positive', 'pbs', 'lp_blank']
-    # all records with unique identifiers should be present in both sheets
-    non_matching_ids = pd.merge(external_metadata_metadata[~external_metadata_metadata["lab_accession_id"].str.lower().isin(sentinel_ids)],
-        external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].notna()],
-        how="outer",
-        left_on=["LIMS", "lab_accession_id"],
-        right_on=["Sample ID", "Investigator\'s sample ID"],
-        indicator=True).query("_merge != 'both'")[['LIMS', 'lab_accession_id', 'Sample ID',  'Investigator\'s sample ID']]
-
-    # for blanks and twist positives, the sample IDs should present on both sheets, but with empty `Investigator's sample ID` on Samplify FC Data sheet.
-    non_matching_blank_twist_pos = pd.merge(external_metadata_metadata[external_metadata_metadata["lab_accession_id"].str.lower().isin(sentinel_ids)],
-        external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].isna()],
-        how="outer",
-        left_on=["LIMS"],
-        right_on=["Sample ID"],
-        indicator=True).query("_merge != 'both'")[['LIMS', 'lab_accession_id', 'Sample ID',  'Investigator\'s sample ID']]
-
-    assert len(non_matching_ids) == 0, f"Error: Non-matching IDs found in metadata file:\n {non_matching_ids}"
-    assert len(non_matching_blank_twist_pos) == 0, f"Error: Non-matching blanks and/or twist positives found in metadata file:\n{non_matching_blank_twist_pos}"
-
-    # Identify and optionally remove expirimental samples
-    exp_samples = external_metadata_metadata[external_metadata_metadata['lab_accession_id'].str.endswith('_exp', na=False)]
-    exp_samples_samplify = external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].str.endswith('_exp', na=False)]
-    if not exp_samples.empty:
-        print(f"Expirimental samples found: {len(exp_samples)}\n {exp_samples.to_string()}")
-
-        if yes_no_cancel("Drop expirimental samples?"):
-            external_metadata_metadata.drop(exp_samples.index, inplace=True)
-            external_metadata_samplify_fc_data.drop(exp_samples_samplify.index, inplace=True)
-        else:
-            external_metadata_metadata = exp_samples
-            external_metadata_samplify_fc_data = exp_samples_samplify
-
-    # Identify and optionally remove cascadia samples
-    cascadia_samples = external_metadata_metadata[external_metadata_metadata['county'].str.lower().str.strip() == 'cascadia']
-    cascadia_samples_samplify = external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Origin'].str.lower().str.strip() == 'cascadia']
-    if not exp_samples.empty or not cascadia_samples_samplify.empty:
-        print(f"Cascadia samples found:\n {exp_samples.to_string()} \n {cascadia_samples_samplify.to_string()}")
-
-        if yes_no_cancel("Drop Cascadia samples?"):
-            external_metadata_metadata.drop(cascadia_samples.index, inplace=True)
-            external_metadata_samplify_fc_data.drop(cascadia_samples_samplify.index, inplace=True)
-        else:
-            # Cascadia samples should be marked as sequence_reson: Other
-            external_metadata_metadata.loc[cascadia_samples.index, 'sequence_reason'] = 'Other'
-
-    # The Samplify FC Data sheet has an extra row before the headers. Stashing this value to reinsert the row when writing back to Excel.
-    metadata_wb = load_workbook(args.metadata_file)
-    samplify_fc_data_a1 = metadata_wb['Samplify FC Data']['A1'].value
-
-    with pd.ExcelWriter(OUTPUT_PATHS['metadata'], engine='xlsxwriter', date_format='m/d/yyyy') as writer:
-        external_metadata_metadata.to_excel(writer, sheet_name='Metadata', index=False)
-        # put column headers on 2nd row of Samplify FC Data sheet, then populate first row with `samplify_fc_data_a1`` value
-        external_metadata_samplify_fc_data.to_excel(writer, sheet_name='Samplify FC Data', startrow = 1, index=False)
-        worksheet = writer.sheets['Samplify FC Data']
-        worksheet.write(0, 0, samplify_fc_data_a1)
-        # set format for Crt values to 2 decimals so whole numbers aren't displayed as integers (matching source file format)
-        format1 = writer.book.add_format({'num_format': '0.00'})
-        worksheet.set_column('O:O', None, format1)
-        writer.save()
-
-    LOG.debug(f"Saved external metadata file to {OUTPUT_PATHS['metadata']}")
 
 
 if __name__ == '__main__':
@@ -244,7 +111,7 @@ if __name__ == '__main__':
     assemby_results_file.extractall(output_batch_dir)
     assemby_results_file.close()
 
-    standardize_and_qc_external_metadata(args.metadata_file, batch_date)
+    standardize_and_qc_external_metadata(args.metadata_file, batch_date, OUTPUT_PATHS['metadata'])
 
     # create CSV of SFS sample barcodes
     identifiers = read_all_identifiers(OUTPUT_PATHS['metadata'])

@@ -1077,6 +1077,8 @@ if __name__ == '__main__':
         help = "File path to the NextClade TSV file")
     parser.add_argument("--previous-submissions", type=str, required=True,
         help = "File path to TSV file containing previous submissions")
+    parser.add_argument("--previous-submissions-rsv-flu", type=str, required=True,
+        help = "File path to TSV file containing previous RSV and flu submissions")
     parser.add_argument("--strain-id", type=int, required=True,
         help = "The starting numerical strain ID for this batch of sequences")
     parser.add_argument("--fasta", type=str, required=True,
@@ -1125,6 +1127,14 @@ if __name__ == '__main__':
     metadata = add_sequence_status(metadata, prev_subs)
     metadata = assign_strain_identifier(metadata, args.strain_id)
 
+    # Check for duplicated strain names
+    previous_strain_names = pd.read_csv(args.previous_submissions, sep='\t', usecols=['strain_name'])['strain_name'].dropna()
+    previous_rsv_flu_strain_names = pd.read_csv(args.previous_submissions_rsv_flu, sep='\t', usecols=['strain_name'])['strain_name'].dropna()
+    current_strain_names = metadata[metadata['strain_name']!='N/A']['strain_name'].dropna()
+    all_strain_names = previous_strain_names.append(previous_rsv_flu_strain_names, ignore_index=True).append(current_strain_names, ignore_index=True)
+    duplicate_strain_names = all_strain_names[all_strain_names.duplicated()]
+    assert duplicate_strain_names.empty, f"Error: Overlapping identifiers\n {duplicate_strain_names}"
+
     # Create the output directory
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1134,6 +1144,9 @@ if __name__ == '__main__':
     # Create CSV with all metadata fields for easy debugging
     metadata.to_csv(output_dir / f'{batch_name}_metadata.csv', index=False)
 
+    # Remove rows with null consensus genome length
+    metadata = metadata[~metadata.length.isna()]
+
     create_identifiers_report(metadata, output_dir, batch_name)
 
     create_voc_reports(metadata, args.excluded_vocs, output_dir, batch_name)
@@ -1141,7 +1154,7 @@ if __name__ == '__main__':
 
     create_sample_status_report(metadata, output_dir, batch_name)
     create_wa_doh_report(metadata, args.nextclade, output_dir, batch_name)
-    create_or_doh_report(metadata, args.nextclade, output_dir, batch_name, args.test_name)
+    #create_or_doh_report(metadata, args.nextclade, output_dir, batch_name, args.test_name)
 
     # Only create submissions for sequences that have status "submitted"
     submit_metadata = metadata.loc[metadata['status'] == 'submitted']

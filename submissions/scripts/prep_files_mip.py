@@ -42,6 +42,8 @@ if __name__ == '__main__':
         help = "File path to metadata Excel file (.xlsx)")
     parser.add_argument("--pathogen", type=str, required=True,
         choices=['sars-cov-2', 'rsv-a', 'rsv-b', 'flu-a', 'flu-b'])
+    parser.add_argument("--subtype", type=str, required=False,
+        choices=['h1n1', 'h3n2'])
     args = parser.parse_args()
 
     try:
@@ -63,37 +65,34 @@ if __name__ == '__main__':
 
     # shared outputs for all pathogens
     OUTPUT_PATHS = {
-        'fasta': Path(output_batch_dir, Path(args.fasta).stem).with_suffix('.fa'),
+        'fasta': Path(output_batch_dir, args.pathogen).with_suffix('.fa'),
         'lims-metadata': Path(output_batch_dir, 'lims-metadata-with-county.csv'),
         'id3c-metadata': Path(output_batch_dir, 'id3c-metadata-with-county.csv'),
         'id3c-sample-barcodes': Path(output_batch_dir, 'id3c-sample-barcodes.csv'),
         'lims-sample-barcodes': Path(output_batch_dir, 'lims-sample-barcodes.csv'),
         'metadata': Path(output_batch_dir, 'external-metadata.xlsx'),
+
+        # pathogen-specific outputs
+        'metrics': Path(output_batch_dir, f'{args.pathogen}-metrics.tsv'),
+        'nextclade': Path(output_batch_dir,f'nextclade-{args.pathogen}.tsv'),
+        'nextclade-data': Path(output_batch_dir, f'data/{args.pathogen}'),
+        'vadr-dir': Path(output_batch_dir, f'genbank-{args.pathogen}'), #this one is a folder
     }
 
     # pathogen-specific outputs
     if args.pathogen == 'sars-cov-2':
         OUTPUT_PATHS.update({
-            'metrics': Path(output_batch_dir, 'sars-cov-2-metrics.tsv'),
-            'nextclade': Path(output_batch_dir,'nextclade-sars-cov-2.tsv'),
-            'nextclade-data': Path(output_batch_dir, 'data/sars-cov-2'),
             'previous-submissions': Path(output_batch_dir, 'sars-cov-2-previous-submissions.tsv'),
+            'previous-submissions-other': Path(output_batch_dir, 'rsv-flu-previous-submissions.tsv'),
             'excluded-vocs': Path(output_batch_dir, 'excluded-vocs.txt'),
-            'vadr-dir': Path(output_batch_dir, 'genbank'), #this one is a folder
         })
-    elif args.pathogen == 'rsv-a':
+    else:
         OUTPUT_PATHS.update({
-            'metrics': Path(output_batch_dir, 'rsv-a-metrics.tsv'),
-            'nextclade': Path(output_batch_dir,'nextclade-rsv-a.tsv'),
-            'nextclade-data': Path(output_batch_dir, 'data/rsv-a'),
-            'previous-submissions': Path(output_batch_dir, 'rsv-previous-submissions.tsv'),
-        })
-    elif args.pathogen == 'rsv-b':
-        OUTPUT_PATHS.update({
-            'metrics': Path(output_batch_dir, 'rsv-b-metrics.tsv'),
-            'nextclade': Path(output_batch_dir,'nextclade-rsv-b.tsv'),
-            'nextclade-data': Path(output_batch_dir, 'data/rsv-b'),
-            'previous-submissions': Path(output_batch_dir, 'rsv-previous-submissions.tsv'),
+            'previous-submissions': Path(output_batch_dir, 'rsv-flu-previous-submissions.tsv'),
+            'previous-submissions-other': Path(output_batch_dir, 'sars-cov-2-previous-submissions.tsv'),
+            'fasta-short-ids': Path(output_batch_dir, f'{args.pathogen}-short-ids.fa'),
+            'genbank-trimmed-fasta': Path(output_batch_dir, f'{args.pathogen}-genbank-trimmed.fa'),
+            'genbank-trim-log': Path(output_batch_dir, f'{args.pathogen}-genbank-trim.xml'),
         })
 
     # for some reason this value is sometimes a tuple where the second value is blank
@@ -104,7 +103,7 @@ if __name__ == '__main__':
 
     try:
         LOG.debug(f"Parsing FASTA file: {args.fasta}")
-        sequences = SeqIO.parse(args.fasta, 'fasta')
+        sequences = list(SeqIO.parse(args.fasta, 'fasta'))
 
         # save FASTA file to output location
         shutil.copyfile(args.fasta, OUTPUT_PATHS['fasta'])
@@ -165,11 +164,19 @@ if __name__ == '__main__':
         df.insert(0, 'SampleId', identifier)
         metrics_df = metrics_df.append(df[PICARD_METRICS_COLS + ['SampleId']], ignore_index=True)
 
+    # GenBank's trimming script has a 50 character limit on ids, so we'll shorten them temporarily when trimming
+    # and then use this dict to map short ids back to long ids
+    original_record_ids = {}
 
     # Calculate additional metrics from sequence and add to metrics dataframe
     for record in sequences:
         identifier = str(record.id.split('|')[0]).lower()
         metrics = sequence_metrics(record.seq, record.id, args.pathogen)
+
+        # shorten identifiers to use with GenBank trimming script later
+        original_record_ids[identifier] = record.id
+        record.description = identifier
+        record.id = identifier
 
         # update corresponding row with additional metrics
         for k,v in metrics.items():
@@ -178,14 +185,14 @@ if __name__ == '__main__':
     metrics_df.to_csv(OUTPUT_PATHS['metrics'], sep='\t', index=False)
     LOG.debug(f"Combined metrics file saved to: {OUTPUT_PATHS['metrics']}")
 
-
     if yes_no_cancel("Process with NextClade?"):
         LOG.debug("Pulling data from NextClade")
 
         process_with_nextclade(OUTPUT_PATHS['nextclade-data'],
                             OUTPUT_PATHS['nextclade'],
                             OUTPUT_PATHS['fasta'],
-                            args.pathogen)
+                            args.pathogen,
+                            args.subtype or None)
 
         LOG.debug("NextClade processing complete")
 
@@ -197,8 +204,8 @@ if __name__ == '__main__':
 
     # create CSV of SFS sample barcodes
     identifiers = read_all_identifiers(OUTPUT_PATHS['metadata'])
-    id3c_identifiers = find_sfs_identifiers(identifiers, '^((?!cascadia|uw-reopening).)*$')
-    lims_identifiers = find_sfs_identifiers(identifiers, '^(cascadia|uw-reopening)$')
+    id3c_identifiers = find_sfs_identifiers(identifiers, '^((?!cascadia).)*$')
+    lims_identifiers = find_sfs_identifiers(identifiers, '^(cascadia)$')
 
     sfs_missing_date = pd.DataFrame()
 
@@ -265,14 +272,37 @@ if __name__ == '__main__':
 
 
     if yes_no_cancel("Pull latest previous submissions file from Github?"):
-        LOG.debug(f"Saving previous submissions to: {OUTPUT_PATHS['previous-submissions']}")
-
-        pull_previous_submissions(OUTPUT_PATHS['previous-submissions'], args.pathogen)
+        pull_previous_submissions(OUTPUT_PATHS['previous-submissions'], OUTPUT_PATHS['previous-submissions-other'], args.pathogen)
         LOG.debug("Finished pulling previous submissions")
 
     if args.pathogen == 'sars-cov-2':
         calculate_excluded_vocs(nextclade_df, OUTPUT_PATHS['excluded-vocs'], identifier_format='sfs_sample_barcode')
-        process_with_vadr(OUTPUT_PATHS['fasta'], output_batch_dir, interactive=True)
+
+    if yes_no_cancel("Trim with GenBank script?"):
+        # The genbank trim script has a limit of 50 characters on identifiers; save a fasta file with just NWGC ids
+        #fasta_out = SeqIO.FastaIO.FastaWriter(OUTPUT_PATHS['fasta-short-ids'], wrap=None)
+        #fasta_out.write_file(sequences)
+        SeqIO.write(sequences, OUTPUT_PATHS['fasta-short-ids'], 'fasta-2line')
+
+        # Trim with GenBank's trimming script
+        result = Conda.run_command('run',
+            f'{os.path.realpath(os.path.dirname(__file__))}/fastaedit_public',
+            "-in", f"{OUTPUT_PATHS['fasta-short-ids']}",
+            "-trim_ambig_bases",
+            "-out_seq_file", f"{OUTPUT_PATHS['genbank-trimmed-fasta']}",
+            "-out", f"{OUTPUT_PATHS['genbank-trim-log']}"
+        )
+
+        # Replace the shortened IDs with the original long IDs. GenBank's trim script adds a `lcl|` prefix to each ID
+        # which must be removed.
+        trimmed_records = list(SeqIO.parse(OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta'))
+        for r in trimmed_records:
+            r.id = r.description = original_record_ids[r.id.lstrip('lcl|')]
+        SeqIO.write(trimmed_records, OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta-2line')
+
+        process_with_vadr(OUTPUT_PATHS['genbank-trimmed-fasta'], output_batch_dir, args.pathogen, interactive=True)
+    else:
+        process_with_vadr(OUTPUT_PATHS['fasta'], output_batch_dir, args.pathogen, interactive=True)
 
     print("Completed file prep.\n\n")
 
@@ -292,7 +322,8 @@ if __name__ == '__main__':
 
         excluded_vocs_arg = f"--excluded-vocs {OUTPUT_PATHS.get('excluded-vocs')} \\\n" if (OUTPUT_PATHS.get('excluded-vocs')) else ""
         vadr_dir_arg = f"--vadr-dir {OUTPUT_PATHS.get('vadr-dir')} \\\n" if (OUTPUT_PATHS.get('vadr-dir')) else ""
-
+        prev_submissions_other_arg = f"--previous-submissions-rsv-flu {OUTPUT_PATHS.get('previous-submissions-other')} \\\n" if args.pathogen=='sars-cov-2' else f"--previous-submissions-sars-cov-2 {OUTPUT_PATHS.get('previous-submissions-other')} \\\n"
+        subtype_arg = f"--subtype {args.pathogen.split('-')[-1]} \\\n" if (args.pathogen.startswith('rsv-') or args.pathogen.startswith('flu-')) else ""
         print("Review outputs, then run this command to create submissions:\n\n"
             f"python3 {create_submissions_script} \\\n"
             f"--batch-name {args.batch_date} \\\n"
@@ -301,6 +332,7 @@ if __name__ == '__main__':
             f"--fasta {OUTPUT_PATHS['fasta']} \\\n"
             f"--nextclade {OUTPUT_PATHS['nextclade']} \\\n"
             f"--previous-submissions {OUTPUT_PATHS['previous-submissions']} \\\n"
+            f"{prev_submissions_other_arg}"
             f"--output-dir {Path(output_batch_dir, 'submissions', args.pathogen)} \\\n"
             f"--strain-id {'<not found>' if pd.isna(next_avail_strain_id) else next_avail_strain_id} \\\n"
             f"--metrics {OUTPUT_PATHS['metrics']} \\\n"
@@ -308,6 +340,7 @@ if __name__ == '__main__':
             f"--metadata {OUTPUT_PATHS['metadata']} \\\n"
             f"{excluded_vocs_arg}"
             f"{vadr_dir_arg}"
+            f"{subtype_arg}"
             f"--gisaid-username <your username> \n"
         )
     else:

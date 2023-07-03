@@ -150,14 +150,14 @@ rule post_trim_fastqc:
         u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
         u2 = rules.trim_fastqs.output.trimmed_fastq_2u
     output:
-        qc_1p_html = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.html",
-        qc_2p_html = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.html",
-        qc_1u_html = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.html",
-        qc_2u_html = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.html",
-        qc_1p_zip = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.zip",
-        qc_2p_zip = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
-        qc_1u_zip = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
-        qc_2u_zip = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
+        #qc_1p_html = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.html",
+        #qc_2p_html = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.html",
+        #qc_1u_html = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.html",
+        #qc_2u_html = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.html",
+        #qc_1p_zip = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.zip",
+        #qc_2p_zip = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
+        #qc_1u_zip = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
+        #qc_2u_zip = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
     shell:
         """
         fastqc {input.p1} -o summary/post_trim_fastqc

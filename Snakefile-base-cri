@@ -103,10 +103,10 @@ rule trim_fastqs:
         fastq_f = "process/merged/{sample}_R1.fastq.gz",
         fastq_r = "process/merged/{sample}_R2.fastq.gz"
     output:
-        trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq",
-        trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq",
-        trimmed_fastq_1u = "process/trimmed/{sample}.trimmed_1U.fastq",
-        trimmed_fastq_2u = "process/trimmed/{sample}.trimmed_2U.fastq"
+        trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq.gz",
+        trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq.gz",
+        trimmed_fastq_1u = "process/trimmed/{sample}.trimmed_1U.fastq.gz",
+        trimmed_fastq_2u = "process/trimmed/{sample}.trimmed_2U.fastq.gz"
     params:
         paired_end = config["params"]["trimmomatic"]["paired_end"],
         adapters = config["params"]["trimmomatic"]["adapters"],
@@ -122,7 +122,7 @@ rule trim_fastqs:
             {params.paired_end} \
             -phred33 \
             {input.fastq_f} {input.fastq_r} \
-            -baseout process/trimmed/{wildcards.sample}.trimmed.fastq \
+            -baseout process/trimmed/{wildcards.sample}.trimmed.fastq.gz \
             ILLUMINACLIP:{params.adapters}:{params.illumina_clip} \
             SLIDINGWINDOW:{params.window_size}:{params.trim_qscore} \
             MINLEN:{params.minimum_length}

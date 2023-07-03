@@ -308,6 +308,7 @@ rule call_consensus:
             --min-coverage {params.min_cov} \
             --min-avg-qual {params.snp_qual_threshold} \
             --min-var-freq {params.snp_frequency} \
+            --min-read2 {params.min_reads2} \
             --strand-filter 0 \
             --variants 1 \
             --output-vcf 1 > {output.vcf}

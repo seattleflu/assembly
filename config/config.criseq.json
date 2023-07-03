@@ -37,6 +37,7 @@
       "varscan" :
         {
           "min_cov" : "20",
+          "min_reads2": "30",
           "snp_qual_threshold" : "30",
           "snp_frequency" : "0.50"
         }

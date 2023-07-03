@@ -344,11 +344,12 @@ rule vcf_to_consensus:
     benchmark:
         "benchmarks/{sample}_{reference}.consensus"
     shell:
-        """
-        cat {input.ref} | \
-            bcftools consensus {input.bcf} \
-                --mask {input.mask} > \
-            {output.consensus_genome}
+        f"""
+        mkdir -p "consensus_genomes/{{wildcards.reference}}"
+        cat {{input.ref}} | \
+            bcftools consensus {{input.bcf}} \
+                --mask {{input.mask}} > \
+            {{output.consensus_genome}}
         """
 
 rule clean:

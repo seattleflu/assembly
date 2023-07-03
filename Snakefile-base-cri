@@ -29,7 +29,7 @@ def generate_sample_ids(config: dict) -> set:
     Will ignore all sample ids listed under "ignored_samples" of *config*
     """
     all_ids = set()
-    for filename in sorted(glob.glob("{}/*".format(config['fastq_directory']))):
+    for filename in glob.glob("{}/*".format(config['fastq_directory'])):
         if filename.endswith('.fastq.gz'):
             sample_id = filename.split('.')[0].split('/')[-1].split('_')[0]
             if sample_id in config['ignored_samples']:
@@ -45,8 +45,8 @@ def generate_all_files(sample: str, config: dict) -> tuple:
     The fastqs are expected to have *sample* in the filenamane and
     R1/R2 in the filename to differentiate forward and reverse reads.
     """
-    r1 = sorted(glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample)))
-    r2 = sorted(glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample)))
+    r1 = glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample))
+    r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
     return (r1, r2)
 
 def filter_combinator(combinator, config):
@@ -103,10 +103,10 @@ rule trim_fastqs:
         fastq_f = "process/merged/{sample}_R1.fastq.gz",
         fastq_r = "process/merged/{sample}_R2.fastq.gz"
     output:
-        trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq.gz",
-        trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq.gz",
-        trimmed_fastq_1u = "process/trimmed/{sample}.trimmed_1U.fastq.gz",
-        trimmed_fastq_2u = "process/trimmed/{sample}.trimmed_2U.fastq.gz"
+        trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq",
+        trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq",
+        trimmed_fastq_1u = "process/trimmed/{sample}.trimmed_1U.fastq",
+        trimmed_fastq_2u = "process/trimmed/{sample}.trimmed_2U.fastq"
     params:
         paired_end = config["params"]["trimmomatic"]["paired_end"],
         adapters = config["params"]["trimmomatic"]["adapters"],
@@ -122,44 +122,27 @@ rule trim_fastqs:
             {params.paired_end} \
             -phred33 \
             {input.fastq_f} {input.fastq_r} \
-            -baseout process/trimmed/{wildcards.sample}.trimmed.fastq.gz \
+            -baseout process/trimmed/{wildcards.sample}.trimmed.fastq \
             ILLUMINACLIP:{params.adapters}:{params.illumina_clip} \
             SLIDINGWINDOW:{params.window_size}:{params.trim_qscore} \
             MINLEN:{params.minimum_length}
         """
 
-rule trim_mips_3prime_overhangs:
-    input:
-        trimmed_fastq_1p = rules.trim_fastqs.output.trimmed_fastq_1p,
-        trimmed_fastq_2p = rules.trim_fastqs.output.trimmed_fastq_2p
-    output:
-        fastq_1p = "process/trimmed_overhangs/{sample}.trimmed_overhangs_1P.fastq.gz",
-        fastq_2p = "process/trimmed_overhangs/{sample}.trimmed_overhangs_2P.fastq.gz"
-    shell:
-        """
-        /usr/local/bin/NGmerge -z -v -a -e 15 -p 0.20 \
-            -1 {input.trimmed_fastq_1p} \
-            -2 {input.trimmed_fastq_2p} \
-            -o process/trimmed/{wildcards.sample}
-        """
-
 rule post_trim_fastqc:
     input:
-        #p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
-        #p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
-        p1 = rules.trim_mips_3prime_overhangs.output.fastq_1p,
-        p2 = rules.trim_mips_3prime_overhangs.output.fastq_2p,
+        p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
+        p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
         u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
         u2 = rules.trim_fastqs.output.trimmed_fastq_2u
     output:
-        #qc_1p_html = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.html",
-        #qc_2p_html = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.html",
-        #qc_1u_html = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.html",
-        #qc_2u_html = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.html",
-        #qc_1p_zip = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.zip",
-        #qc_2p_zip = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
-        #qc_1u_zip = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
-        #qc_2u_zip = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
+        qc_1p_html = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.html",
+        qc_2p_html = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.html",
+        qc_1u_html = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.html",
+        qc_2u_html = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.html",
+        qc_1p_zip = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.zip",
+        qc_2p_zip = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
+        qc_1u_zip = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
+        qc_2u_zip = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
     shell:
         """
         fastqc {input.p1} -o summary/post_trim_fastqc
@@ -170,10 +153,8 @@ rule post_trim_fastqc:
 
 rule map:
     input:
-        #p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
-        #p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
-        p1 = rules.trim_mips_3prime_overhangs.output.fastq_1p,
-        p2 = rules.trim_mips_3prime_overhangs.output.fastq_2p,
+        p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
+        p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
         u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
         u2 = rules.trim_fastqs.output.trimmed_fastq_2u,
         ref_file = rules.index_reference_genome.output.indexed_reference
@@ -192,7 +173,7 @@ rule map:
             -1 {input.p1} \
             -2 {input.p2} \
             -U {input.u1},{input.u2} \
-            -p {params.threads} \
+            -P {params.threads} \
             {params.map_all} \
             --local 2> {output.bt2_log} | \
                 samtools view -bSF4 - > {output.mapped_bam_file}

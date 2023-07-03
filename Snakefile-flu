@@ -14,7 +14,7 @@ from urllib.parse import urljoin
 
 
 # Include the main assembly pipeline
-include: "Snakefile-base"
+include: "Snakefile-base-flu"
 
 # input function for the rule aggregate
 def aggregate_input(wildcards):
@@ -38,20 +38,16 @@ rule all:
     input:
         # pre_fastqc = expand("summary/pre_trim_fastqc/{fname}_fastqc.html",
         #        fname=glob.glob(config['fastq_directory']),
-        #post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
-        #       sample=all_ids,
-        #       tr=["1P", "1U", "2P", "2U"],
-        #       ext=["zip", "html"]),
+        post_fastqc = expand("summary/post_trim_fastqc/{sample}.trimmed_{tr}_fastqc.{ext}",
+               sample=all_ids,
+               tr=["1P", "1U", "2P", "2U"],
+               ext=["zip", "html"]),
         bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt", filtered_product,
                sample=all_ids,
                reference=all_references),
         aggregate = expand("summary/aggregate/{reference}/{sample}.log", filtered_product,
                 sample=all_ids,
                 reference=all_references),
-        consensus_genomes = expand("consensus_genomes/{reference}/{sample}.consensus.fasta", filtered_product,
-            sample=all_ids,
-            reference=all_references
-        ),
 
 
 rule nwgc_sfs_map:

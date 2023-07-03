@@ -9,7 +9,7 @@ import json
 
 
 # Include the main assembly pipeline
-include: "Snakefile-base"
+include: "Snakefile-base-flu"
 
 # input function for the rule aggregate
 def aggregate_input(wildcards):

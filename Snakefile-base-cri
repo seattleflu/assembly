@@ -128,10 +128,25 @@ rule trim_fastqs:
             MINLEN:{params.minimum_length}
         """
 
+rule trim_mips_3prime_overhangs:
+    input:
+        trimmed_fastq_1p = rules.trim_fastqs.output.trimmed_fastq_1p,
+        trimmed_fastq_2p = rules.trim_fastqs.output.trimmed_fastq_2p
+    output:
+        fastq_1p = "process/trimmed_overhangs/{sample}.trimmed_overhangs_P_1.fastq.gz",
+        fastq_2p = "process/trimmed_overhangs/{sample}.trimmed_overhangs_P_2.fastq.gz"
+    shell:
+        """
+        NGmerge -z -v -a -e 15 -p 0.20 \
+            -1 {input.trimmed_fastq_1p} \
+            -2 {input.trimmed_fastq_2p} \
+            -o process/trimmed_overhangs/{wildcards.sample}.trimmed_overhangs_P
+        """
+
 rule post_trim_fastqc:
     input:
-        p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
-        p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
+        p1 = rules.trim_mips_3prime_overhangs.output.fastq_1p,
+        p2 = rules.trim_mips_3prime_overhangs.output.fastq_2p,
         u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
         u2 = rules.trim_fastqs.output.trimmed_fastq_2u
     output:
@@ -153,8 +168,8 @@ rule post_trim_fastqc:
 
 rule map:
     input:
-        p1 = rules.trim_fastqs.output.trimmed_fastq_1p,
-        p2 = rules.trim_fastqs.output.trimmed_fastq_2p,
+        p1 = rules.trim_mips_3prime_overhangs.output.fastq_1p,
+        p2 = rules.trim_mips_3prime_overhangs.output.fastq_2p,
         u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
         u2 = rules.trim_fastqs.output.trimmed_fastq_2u,
         ref_file = rules.index_reference_genome.output.indexed_reference

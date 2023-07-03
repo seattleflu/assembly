@@ -34,14 +34,14 @@ def aggregate_input(wildcards):
 
 rule all:
     input:
-        bamstats = expand("summary/bamstats/{reference}/{sample}.coverage_stats.txt", filtered_product,
-               sample=all_ids,
-               reference=all_references),
-        consensus_genomes = expand("consensus_genomes/{reference}/{sample}.consensus.fasta", filtered_product,
+        bamstats = expand(f"{work_dir}/{assembly_subdir}/summary/bamstats/{{reference}}/{{sample}}.coverage_stats.txt", filtered_product,
+            sample=all_ids,
+            reference=all_references),
+        consensus_genomes = expand(f"{work_dir}/{assembly_subdir}/consensus_genomes/{{reference}}/{{sample}}.consensus.fasta", filtered_product,
             sample=all_ids,
             reference=all_references
         ),
-        masked_consensus_genomes = expand("consensus_genomes/{reference}/{sample}.masked_consensus.fasta", filtered_product,
+        masked_consensus_genomes = expand(f"{work_dir}/{assembly_subdir}/consensus_genomes/{{reference}}/{{sample}}.masked_consensus.fasta", filtered_product,
             sample=all_ids,
             reference=all_references
         ),
@@ -51,7 +51,7 @@ rule fasta_headers:
     input:
         masked_consensus = rules.vcf_to_consensus.output
     output:
-        masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
+        masked_consensus = f"{work_dir}/{assembly_subdir}/consensus_genomes/{{reference}}/{{sample}}.masked_consensus.fasta"
     shell:
         """
         cat {input.masked_consensus} | \
@@ -71,7 +71,7 @@ rule metadata_to_json:
         all_r1 = lambda wildcards: mapped[wildcards.sample][0],
         all_r2 = lambda wildcards: mapped[wildcards.sample][1]
     output:
-        temp("consensus_genomes/{reference}/{sample}.metadata.json")
+        temp(f"{work_dir}/{assembly_subdir}/consensus_genomes/{{reference}}/{{sample}}.metadata.json")
     shell:
         """
         python scripts/metadata_to_json.py {input.all_r1:q} {input.all_r2:q} > {output}
@@ -82,7 +82,7 @@ rule masked_consensus_to_json:
     input:
         masked_consensus = rules.fasta_headers.output.masked_consensus
     output:
-        temp("consensus_genomes/{reference}/{sample}.masked_consensus.json")
+        temp(f"{work_dir}/{assembly_subdir}/consensus_genomes/{{reference}}/{{sample}}.masked_consensus.json")
     shell:
         """
         python scripts/fasta_to_json.py {input.masked_consensus} > {output}
@@ -94,7 +94,7 @@ rule summary_stats_to_json:
         bam_coverage = rules.bamstats.output.bamstats_file,
         bowtie2 = rules.map.output.bt2_log
     output:
-        temp("consensus_genomes/{reference}/{sample}.summary_stats.json")
+        temp(f"{work_dir}/{assembly_subdir}/consensus_genomes/{{reference}}/{{sample}}.summary_stats.json")
     shell:
         """
         python scripts/summary_stats_to_json.py --bamstats {input.bam_coverage} \
@@ -106,6 +106,6 @@ rule aggregate:
     input:
         aggregate_input = aggregate_input
     output:
-        aggregate_summary = "summary/aggregate/{reference}/{sample}.log"
+        aggregate_summary = f"{work_dir}/{assembly_subdir}/summary/aggregate/{{reference}}/{{sample}}.log"
     run:
         shell("echo 'Final output: {input.aggregate_input}' > {output}")

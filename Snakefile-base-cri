@@ -19,17 +19,21 @@ import glob
 from datetime import datetime
 from itertools import product
 
+
+input_dir = f"{work_dir}/{input_subdir}"
+
+
 #### Helper functions and variable def'ns
 def generate_sample_ids(config: dict) -> set:
     """
-    Find all fastz.gz files within the fastq_directory in the *config* and
+    Find all fastz.gz files within the input_dir in the *config* and
     parse the sample ids from these files to return as a set.
 
     Expects the file names to have the format of <sample_id>_*.fastq.gz
     Will ignore all sample ids listed under "ignored_samples" of *config*
     """
     all_ids = set()
-    for filename in sorted(glob.glob("{}/*".format(config['fastq_directory']))):
+    for filename in sorted(glob.glob("{}/*".format(input_dir))):
         if filename.endswith('.fastq.gz'):
             sample_id = filename.split('.')[0].split('/')[-1].split('_')[0]
             if sample_id in config['ignored_samples']:
@@ -40,13 +44,13 @@ def generate_sample_ids(config: dict) -> set:
 def generate_all_files(sample: str, config: dict) -> tuple:
     """
     For a given sample, determine all fastqs as a tuple of forward
-    and reverse within the fastq_directory in the *config*.
+    and reverse within the input_dir in the *config*.
 
     The fastqs are expected to have *sample* in the filenamane and
     R1/R2 in the filename to differentiate forward and reverse reads.
     """
-    r1 = sorted(glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample)))
-    r2 = sorted(glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample)))
+    r1 = sorted(glob.glob('{}/*{}*R1*'.format(input_dir, sample)))
+    r2 = sorted(glob.glob('{}/*{}*R2*'.format(input_dir, sample)))
     return (r1, r2)
 
 def filter_combinator(combinator, config):
@@ -90,8 +94,8 @@ rule merge_lanes:
         all_r1 = lambda wildcards: mapped[wildcards.sample][0],
         all_r2 = lambda wildcards: mapped[wildcards.sample][1]
     output:
-        merged_r1 = "process/merged/{sample}_R1.fastq.gz",
-        merged_r2 = "process/merged/{sample}_R2.fastq.gz"
+        merged_r1 = f"{work_dir}/{assembly_subdir}/process/merged/{{sample}}_R1.fastq.gz",
+        merged_r2 = f"{work_dir}/{assembly_subdir}/process/merged/{{sample}}_R2.fastq.gz"
     shell:
         """
         cat {input.all_r1} >> {output.merged_r1}
@@ -100,13 +104,13 @@ rule merge_lanes:
 
 rule trim_fastqs:
     input:
-        fastq_f = "process/merged/{sample}_R1.fastq.gz",
-        fastq_r = "process/merged/{sample}_R2.fastq.gz"
+        fastq_f = f"{work_dir}/{assembly_subdir}/process/merged/{{sample}}_R1.fastq.gz",
+        fastq_r = f"{work_dir}/{assembly_subdir}/process/merged/{{sample}}_R2.fastq.gz"
     output:
-        trimmed_fastq_1p = "process/trimmed/{sample}.trimmed_1P.fastq.gz",
-        trimmed_fastq_2p = "process/trimmed/{sample}.trimmed_2P.fastq.gz",
-        trimmed_fastq_1u = "process/trimmed/{sample}.trimmed_1U.fastq.gz",
-        trimmed_fastq_2u = "process/trimmed/{sample}.trimmed_2U.fastq.gz"
+        trimmed_fastq_1p = f"{work_dir}/{assembly_subdir}/process/trimmed/{{sample}}.trimmed_1P.fastq.gz",
+        trimmed_fastq_2p = f"{work_dir}/{assembly_subdir}/process/trimmed/{{sample}}.trimmed_2P.fastq.gz",
+        trimmed_fastq_1u = f"{work_dir}/{assembly_subdir}/process/trimmed/{{sample}}.trimmed_1U.fastq.gz",
+        trimmed_fastq_2u = f"{work_dir}/{assembly_subdir}/process/trimmed/{{sample}}.trimmed_2U.fastq.gz"
     params:
         paired_end = config["params"]["trimmomatic"]["paired_end"],
         adapters = config["params"]["trimmomatic"]["adapters"],
@@ -117,15 +121,15 @@ rule trim_fastqs:
     benchmark:
         "benchmarks/{sample}.trimmo"
     shell:
-        """
+        f"""
         trimmomatic \
-            {params.paired_end} \
+            {{params.paired_end}} \
             -phred33 \
-            {input.fastq_f} {input.fastq_r} \
-            -baseout process/trimmed/{wildcards.sample}.trimmed.fastq.gz \
-            ILLUMINACLIP:{params.adapters}:{params.illumina_clip} \
-            SLIDINGWINDOW:{params.window_size}:{params.trim_qscore} \
-            MINLEN:{params.minimum_length}
+            {{input.fastq_f}} {{input.fastq_r}} \
+            -baseout {work_dir}/{assembly_subdir}/process/trimmed/{{wildcards.sample}}.trimmed.fastq.gz \
+            ILLUMINACLIP:{{params.adapters}}:{{params.illumina_clip}} \
+            SLIDINGWINDOW:{{params.window_size}}:{{params.trim_qscore}} \
+            MINLEN:{{params.minimum_length}}
         """
 
 rule trim_mips_3prime_overhangs:
@@ -133,14 +137,14 @@ rule trim_mips_3prime_overhangs:
         trimmed_fastq_1p = rules.trim_fastqs.output.trimmed_fastq_1p,
         trimmed_fastq_2p = rules.trim_fastqs.output.trimmed_fastq_2p
     output:
-        fastq_1p = "process/trimmed_overhangs/{sample}.trimmed_overhangs_P_1.fastq.gz",
-        fastq_2p = "process/trimmed_overhangs/{sample}.trimmed_overhangs_P_2.fastq.gz"
+        fastq_1p = f"{work_dir}/{assembly_subdir}/process/trimmed_overhangs/{{sample}}.trimmed_overhangs_P_1.fastq.gz",
+        fastq_2p = f"{work_dir}/{assembly_subdir}/process/trimmed_overhangs/{{sample}}.trimmed_overhangs_P_2.fastq.gz"
     shell:
-        """
+        f"""
         NGmerge -z -v -a -e 15 -p 0.20 \
-            -1 {input.trimmed_fastq_1p} \
-            -2 {input.trimmed_fastq_2p} \
-            -o process/trimmed_overhangs/{wildcards.sample}.trimmed_overhangs_P
+            -1 {{input.trimmed_fastq_1p}} \
+            -2 {{input.trimmed_fastq_2p}} \
+            -o {work_dir}/{assembly_subdir}/process/trimmed_overhangs/{{wildcards.sample}}.trimmed_overhangs_P
         """
 
 rule post_trim_fastqc:
@@ -150,20 +154,20 @@ rule post_trim_fastqc:
         u1 = rules.trim_fastqs.output.trimmed_fastq_1u,
         u2 = rules.trim_fastqs.output.trimmed_fastq_2u
     output:
-        #qc_1p_html = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.html",
-        #qc_2p_html = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.html",
-        #qc_1u_html = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.html",
-        #qc_2u_html = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.html",
-        #qc_1p_zip = "summary/post_trim_fastqc/{sample}.trimmed_1P_fastqc.zip",
-        #qc_2p_zip = "summary/post_trim_fastqc/{sample}.trimmed_2P_fastqc.zip",
-        #qc_1u_zip = "summary/post_trim_fastqc/{sample}.trimmed_1U_fastqc.zip",
-        #qc_2u_zip = "summary/post_trim_fastqc/{sample}.trimmed_2U_fastqc.zip"
+        #qc_1p_html = f"{work_dir}/{assembly_subdir}/summary/post_trim_fastqc/{{sample}}.trimmed_1P_fastqc.html",
+        #qc_2p_html = f"{work_dir}/{assembly_subdir}/summary/post_trim_fastqc/{{sample}}.trimmed_2P_fastqc.html",
+        #qc_1u_html = f"{work_dir}/{assembly_subdir}/summary/post_trim_fastqc/{{sample}}.trimmed_1U_fastqc.html",
+        #qc_2u_html = f"{work_dir}/{assembly_subdir}/summary/post_trim_fastqc/{{sample}}.trimmed_2U_fastqc.html",
+        #qc_1p_zip = f"{work_dir}/{assembly_subdir}/summary/post_trim_fastqc/{{sample}}.trimmed_1P_fastqc.zip",
+        #qc_2p_zip = f"{work_dir}/{assembly_subdir}/summary/post_trim_fastqc/{{sample}}.trimmed_2P_fastqc.zip",
+        #qc_1u_zip = f"{work_dir}/{assembly_subdir}/summary/post_trim_fastqc/{{sample}}.trimmed_1U_fastqc.zip",
+        #qc_2u_zip = f"{work_dir}/{assembly_subdir}/summary/post_trim_fastqc/{{sample}}.trimmed_2U_fastqc.zip"
     shell:
-        """
-        fastqc {input.p1} -o summary/post_trim_fastqc
-        fastqc {input.p2} -o summary/post_trim_fastqc
-        fastqc {input.u1} -o summary/post_trim_fastqc
-        fastqc {input.u2} -o summary/post_trim_fastqc
+        f"""
+        fastqc {{input.p1}} -o {work_dir}/{assembly_subdir}/summary/post_trim_fastqc
+        fastqc {{input.p2}} -o {work_dir}/{assembly_subdir}/summary/post_trim_fastqc
+        fastqc {{input.u1}} -o {work_dir}/{assembly_subdir}/summary/post_trim_fastqc
+        fastqc {{input.u2}} -o {work_dir}/{assembly_subdir}/summary/post_trim_fastqc
         """
 
 rule map:
@@ -174,13 +178,13 @@ rule map:
         u2 = rules.trim_fastqs.output.trimmed_fastq_2u,
         ref_file = rules.index_reference_genome.output.indexed_reference
     output:
-        mapped_bam_file = "process/mapped/{reference}/{sample}.bam",
-        bt2_log = "summary/bowtie2/{reference}/{sample}.log"
+        mapped_bam_file = f"{work_dir}/{assembly_subdir}/process/mapped/{{reference}}/{{sample}}.bam",
+        bt2_log = f"{work_dir}/{assembly_subdir}/summary/bowtie2/{{reference}}/{{}sample}}.log"
     params:
         threads = config["params"]["bowtie2"]["threads"],
         map_all = config["params"]["bowtie2"]["all"]
     benchmark:
-        "benchmarks/{sample}_{reference}.bowtie2"
+        f"{work_dir}/{assembly_subdir}/benchmarks/{{sample}}_{{reference}}.bowtie2"
     shell:
         f"""
         bowtie2 \
@@ -198,9 +202,9 @@ rule sort:
     input:
         mapped_bam = rules.map.output.mapped_bam_file
     output:
-        sorted_bam_file = "process/sorted/{reference}/{sample}.sorted.bam"
+        sorted_bam_file = f"{work_dir}/{assembly_subdir}/process/sorted/{{reference}}/{{sample}}.sorted.bam"
     benchmark:
-        "benchmarks/{sample}_{reference}.sort"
+        f"{work_dir}/{assembly_subdir}/benchmarks/{{sample}}_{{reference}}.sort"
     shell:
         """
         samtools view \
@@ -213,9 +217,9 @@ rule bamstats:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file
     output:
-        bamstats_file = "summary/bamstats/{reference}/{sample}.coverage_stats.txt"
+        bamstats_file = f"{work_dir}/{assembly_subdir}/summary/bamstats/{{reference}}/{{sample}}.coverage_stats.txt"
     benchmark:
-        "benchmarks/{sample}_{reference}.bamstats"
+        f"{work_dir}/{assembly_subdir}/benchmarks/{{sample}}_{{reference}}.bamstats"
     shell:
         """
         BAMStats -i {input.sorted_bam} > {output.bamstats_file}
@@ -225,9 +229,9 @@ checkpoint mapped_reads:
     input:
         bt2_log = rules.map.output.bt2_log,
         bamstats = rules.bamstats.output.bamstats_file,
-        reference = config['reference_directory'] + "/{reference}.fasta"
+        reference = f"{config['reference_directory']}/{{reference}}.fasta"
     output:
-        "summary/checkpoint/{reference}/{sample}.json"
+        f"{work_dir}/{assembly_subdir}/summary/checkpoint/{{reference}}/{{sample}}.json"
     params:
         min_cov = config["params"]["varscan"]["min_cov"],
         raw_read_length = config["raw_read_length"]
@@ -245,9 +249,9 @@ checkpoint mapped_reads:
 rule not_mapped:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = config['reference_directory'] + "/{reference}.fasta"
+        reference = f"{config['reference_directory']}/{{reference}}.fasta"
     output:
-        not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
+        not_mapped = f"{work_dir}/{assembly_subdir}/summary/not_mapped/{{reference}}/{{sample}}.txt"
     shell:
         """
         touch {output.not_mapped}
@@ -256,14 +260,14 @@ rule not_mapped:
 rule pileup:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = config['reference_directory'] + "/{reference}.fasta"
+        reference = f"{config['reference_directory']}/{{reference}}.fasta"
     output:
-        pileup = "process/mpileup/{reference}/{sample}.pileup"
+        pileup = f"{work_dir}/{assembly_subdir}/process/mpileup/{{reference}}/{{sample}}.pileup"
     params:
         depth = config["params"]["mpileup"]["depth"],
         min_base_qual = config["params"]["varscan"]["snp_qual_threshold"]
     benchmark:
-        "benchmarks/{sample}_{reference}.mpileup"
+        f"{work_dir}/{assembly_subdir}/benchmarks/{{sample}}_{{reference}}.mpileup"
     shell:
         """
         samtools mpileup -a -A -B \
@@ -277,7 +281,7 @@ rule create_bed_file:
     input:
         pileup = rules.pileup.output.pileup
     output:
-        bed_file = "summary/low_coverage/{reference}/{sample}.bed"
+        bed_file = f"{work_dir}/{assembly_subdir}/summary/low_coverage/{{reference}}/{{sample}}.bed"
     params:
         min_cov = config["params"]["varscan"]["min_cov"],
         min_freq = config["params"]["varscan"]["snp_frequency"]
@@ -294,13 +298,13 @@ rule call_consensus:
     input:
         pileup = rules.pileup.output.pileup
     output:
-        vcf = "process/vcfs/{reference}/{sample}.vcf"
+        vcf = f"{work_dir}/{assembly_subdir}/process/vcfs/{{reference}}/{{sample}}.vcf"
     params:
         min_cov = config["params"]["varscan"]["min_cov"],
         snp_qual_threshold = config["params"]["varscan"]["snp_qual_threshold"],
         snp_frequency = config["params"]["varscan"]["snp_frequency"]
     benchmark:
-        "benchmarks/{sample}_{reference}.varscan"
+        f"{work_dir}/{assembly_subdir}/benchmarks/{{sample}}_{{reference}}.varscan"
     shell:
         """
         varscan mpileup2cns \
@@ -318,7 +322,7 @@ rule zip_vcf:
     input:
         vcf = rules.call_consensus.output.vcf
     output:
-        bcf = "process/vcfs/{reference}/{sample}.vcf.gz"
+        bcf = f"{work_dir}/{assembly_subdir}/process/vcfs/{{reference}}/{{sample}}.vcf.gz"
     shell:
         """
         bgzip {input.vcf}
@@ -328,7 +332,7 @@ rule index_bcf:
     input:
         bcf = rules.zip_vcf.output.bcf
     output:
-        index = "process/vcfs/{reference}/{sample}.vcf.gz.csi"
+        index = f"{work_dir}/{assembly_subdir}/process/vcfs/{{reference}}/{{sample}}.vcf.gz.csi"
     shell:
         """
         bcftools index {input}
@@ -339,11 +343,11 @@ rule vcf_to_consensus:
         bcf = rules.zip_vcf.output.bcf,
         index = rules.index_bcf.output.index,
         mask = rules.create_bed_file.output.bed_file,
-        ref = config['reference_directory'] + "/{reference}.fasta"
+        ref = f"{config['reference_directory']}/{{reference}}.fasta"
     output:
-        consensus_genome = "consensus_genomes/{reference}/{sample}.consensus.fasta"
+        consensus_genome = f"{work_dir}/{assembly_subdir}/consensus_genomes/{{reference}}/{{sample}}.consensus.fasta"
     benchmark:
-        "benchmarks/{sample}_{reference}.consensus"
+        f"{work_dir}/{assembly_subdir}/benchmarks/{{sample}}_{{reference}}.consensus"
     shell:
         f"""
         mkdir -p "consensus_genomes/{{wildcards.reference}}"
@@ -356,9 +360,9 @@ rule vcf_to_consensus:
 rule clean:
     message: "Removing directories: {params}"
     params:
-        "summary "
-        "process "
-        "benchmarks "
+        f"{work_dir}/{assembly_subdir}/summary "
+        f"{work_dir}/{assembly_subdir}/process "
+        f"{work_dir}/{assembly_subdir}/benchmarks "
         f"{config['reference_directory']}/*.bt2 "
         f"{config['reference_directory']}/*.fai"
     shell:

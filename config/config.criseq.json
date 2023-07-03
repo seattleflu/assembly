@@ -1,5 +1,7 @@
 {
-  "fastq_directory": "input/demuxed",
+  "work_dir": "work",
+  "input_subdir": "demuxed/AACJVF7M5",
+  "assembly_subdir": "assembly",
   "ignored_samples": {
       "Undetermined": {}
   },

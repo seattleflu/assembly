@@ -13,6 +13,7 @@ from urllib.parse import urljoin
 # Include the main assembly pipeline
 include: "Snakefile-base-cri"
 
+
 # input function for the rule aggregate
 def aggregate_input(wildcards):
     """
@@ -44,28 +45,10 @@ rule all:
             sample=all_ids,
             reference=all_references
         ),
-        
-
-
-rule nwgc_sfs_map:
-    params:
-        mapper_file = config["barcode_match"]["mapper_filepath"],
-        nwgc_column = config["barcode_match"]["nwgc_column"],
-        sfs_column = config["barcode_match"]["sfs_column"],
-    output:
-        key_value_file = config["barcode_match"]["key_value_filepath"]
-    shell:
-        """
-        python3 scripts/id_barcode_key_value.py \
-            {params.mapper_file} \
-            {params.nwgc_column} \
-            {params.sfs_column} \
-            {output.key_value_file}
-        """
+ 
 
 rule fasta_headers:
     input:
-        key_value_file = rules.nwgc_sfs_map.output,
         masked_consensus = rules.vcf_to_consensus.output
     output:
         masked_consensus = "consensus_genomes/{reference}/{sample}.masked_consensus.fasta"
@@ -74,16 +57,14 @@ rule fasta_headers:
         cat {input.masked_consensus} | \
             perl -pi -e 's/(?<=>)[^>|]*(?<=|)/{wildcards.sample}/g' > \
             {output.masked_consensus}.temp
-        seqkit replace -p '({wildcards.sample})' -r '{{kv}}' \
-            -k {input.key_value_file} --keep-key \
-            {output.masked_consensus}.temp > {output.masked_consensus}
         awk '{{split(substr($0,2),a,"|"); \
             if(a[2]) print ">"a[1]"|"a[1]"-"a[2]"-"a[3]"|"a[2]"|"a[3]; \
             else print; }}' \
-            {output.masked_consensus} > {output.masked_consensus}.temp
-        mv {output.masked_consensus}.temp {output.masked_consensus}
+            {output.masked_consensus}.temp > {output.masked_consensus}
+        rm {output.masked_consensus}.temp
 
         """
+
 
 rule metadata_to_json:
     input:
@@ -96,6 +77,7 @@ rule metadata_to_json:
         python scripts/metadata_to_json.py {input.all_r1:q} {input.all_r2:q} > {output}
         """
 
+
 rule masked_consensus_to_json:
     input:
         masked_consensus = rules.fasta_headers.output.masked_consensus
@@ -105,6 +87,7 @@ rule masked_consensus_to_json:
         """
         python scripts/fasta_to_json.py {input.masked_consensus} > {output}
         """
+
 
 rule summary_stats_to_json:
     input:

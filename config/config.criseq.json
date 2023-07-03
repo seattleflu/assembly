@@ -14,12 +14,6 @@
     "sars-cov-2": {}
   },
   "sample_reference_pairs": {},
-  "barcode_match": {
-    "mapper_filepath": "sample-target-match.xls",
-    "nwgc_column": "nwgc_sample_id",
-    "sfs_column": "sfs_specimen_id",
-    "key_value_filepath": "key_value.txt"
-  },
   "params" :
     {
       "trimmomatic" :

@@ -16,6 +16,7 @@ dependencies:
   - matplotlib
   - nb_conda_kernels
   - ncurses=6.1
+  - ngmerge
   - picard
   - python=3.6
   - r-essentials

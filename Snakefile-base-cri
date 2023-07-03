@@ -179,7 +179,7 @@ rule map:
         ref_file = rules.index_reference_genome.output.indexed_reference
     output:
         mapped_bam_file = f"{work_dir}/{assembly_subdir}/process/mapped/{{reference}}/{{sample}}.bam",
-        bt2_log = f"{work_dir}/{assembly_subdir}/summary/bowtie2/{{reference}}/{{}sample}}.log"
+        bt2_log = f"{work_dir}/{assembly_subdir}/summary/bowtie2/{{reference}}/{{sample}}.log"
     params:
         threads = config["params"]["bowtie2"]["threads"],
         map_all = config["params"]["bowtie2"]["all"]

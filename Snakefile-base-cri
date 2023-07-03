@@ -29,7 +29,7 @@ def generate_sample_ids(config: dict) -> set:
     Will ignore all sample ids listed under "ignored_samples" of *config*
     """
     all_ids = set()
-    for filename in glob.glob("{}/*".format(config['fastq_directory'])):
+    for filename in sorted(glob.glob("{}/*".format(config['fastq_directory']))):
         if filename.endswith('.fastq.gz'):
             sample_id = filename.split('.')[0].split('/')[-1].split('_')[0]
             if sample_id in config['ignored_samples']:
@@ -45,8 +45,8 @@ def generate_all_files(sample: str, config: dict) -> tuple:
     The fastqs are expected to have *sample* in the filenamane and
     R1/R2 in the filename to differentiate forward and reverse reads.
     """
-    r1 = glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample))
-    r2 = glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample))
+    r1 = sorted(glob.glob('{}/*{}*R1*'.format(config['fastq_directory'], sample)))
+    r2 = sorted(glob.glob('{}/*{}*R2*'.format(config['fastq_directory'], sample)))
     return (r1, r2)
 
 def filter_combinator(combinator, config):

@@ -20,6 +20,10 @@ from datetime import datetime
 from itertools import product
 
 
+work_dir = config['work_dir']
+input_subdir = config['input_subdir']
+assembly_subdir = config['assembly_subdir']
+
 input_dir = f"{work_dir}/{input_subdir}"
 
 

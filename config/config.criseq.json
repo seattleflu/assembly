@@ -4,13 +4,11 @@
       "Undetermined": {}
   },
   "raw_read_length": 150,
+  "reference_directory": "references/criseq",
   "reference_viruses": {
-    "flu-a": {},
-    "flu-a-h1n1": {},
+    "flu-a-h1n1pdm": {},
+    "flu-a-h3n2": {},
     "flu-b": {},
-    "flu-b-brisbane": {},
-    "flu-b-colorado": {},
-    "flu-b-washington": {},
     "rsv-a": {},
     "rsv-b": {},
     "sars-cov-2": {}

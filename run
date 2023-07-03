@@ -1,0 +1,1 @@
+snakemake --configfile config/config.criseq.json -k --cores 8 --rerun-incomplete --snakefile Snakefile-cri

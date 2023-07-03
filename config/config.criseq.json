@@ -3,7 +3,7 @@
   "ignored_samples": {
       "Undetermined": {}
   },
-  "raw_read_length": 150,
+  "raw_read_length": 100,
   "reference_directory": "references/criseq",
   "reference_viruses": {
     "flu-a-h1n1pdm": {},

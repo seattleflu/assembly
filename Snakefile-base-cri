@@ -77,12 +77,12 @@ filtered_product = filter_combinator(product, config)
 #### Main pipeline
 rule index_reference_genome:
     input:
-        raw_reference = "references/{reference}.fasta"
+        raw_reference = config['reference_directory'] + "/{reference}.fasta"
     output:
-        indexed_reference = "references/{reference}.1.bt2"
+        indexed_reference = config['reference_directory'] + "/{reference}.1.bt2"
     shell:
-        """
-        bowtie2-build {input.raw_reference} references/{wildcards.reference}
+        f"""
+        bowtie2-build {{input.raw_reference}} {config['reference_directory']}/{{wildcards.reference}}
         """
 
 rule merge_lanes:
@@ -167,16 +167,16 @@ rule map:
     benchmark:
         "benchmarks/{sample}_{reference}.bowtie2"
     shell:
-        """
+        f"""
         bowtie2 \
-            -x references/{wildcards.reference} \
-            -1 {input.p1} \
-            -2 {input.p2} \
-            -U {input.u1},{input.u2} \
-            -P {params.threads} \
-            {params.map_all} \
-            --local 2> {output.bt2_log} | \
-                samtools view -bSF4 - > {output.mapped_bam_file}
+            -x {config['reference_directory']}/{{wildcards.reference}} \
+            -1 {{input.p1}} \
+            -2 {{input.p2}} \
+            -U {{input.u1}},{{input.u2}} \
+            -p {{params.threads}} \
+            {{params.map_all}} \
+            --local 2> {{output.bt2_log}} | \
+                samtools view -bSF4 - > {{output.mapped_bam_file}}
         """
 
 rule sort:
@@ -210,7 +210,7 @@ checkpoint mapped_reads:
     input:
         bt2_log = rules.map.output.bt2_log,
         bamstats = rules.bamstats.output.bamstats_file,
-        reference = "references/{reference}.fasta"
+        reference = config['reference_directory'] + "/{reference}.fasta"
     output:
         "summary/checkpoint/{reference}/{sample}.json"
     params:
@@ -230,7 +230,7 @@ checkpoint mapped_reads:
 rule not_mapped:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta"
+        reference = config['reference_directory'] + "/{reference}.fasta"
     output:
         not_mapped = "summary/not_mapped/{reference}/{sample}.txt"
     shell:
@@ -241,7 +241,7 @@ rule not_mapped:
 rule pileup:
     input:
         sorted_bam = rules.sort.output.sorted_bam_file,
-        reference = "references/{reference}.fasta"
+        reference = config['reference_directory'] + "/{reference}.fasta"
     output:
         pileup = "process/mpileup/{reference}/{sample}.pileup"
     params:
@@ -323,7 +323,7 @@ rule vcf_to_consensus:
         bcf = rules.zip_vcf.output.bcf,
         index = rules.index_bcf.output.index,
         mask = rules.create_bed_file.output.bed_file,
-        ref = "references/{reference}.fasta"
+        ref = config['reference_directory'] + "/{reference}.fasta"
     output:
         consensus_genome = "consensus_genomes/{reference}/{sample}.consensus.fasta"
     benchmark:
@@ -342,8 +342,8 @@ rule clean:
         "summary "
         "process "
         "benchmarks "
-        "references/*.bt2 "
-        "references/*.fai"
+        f"{config['reference_directory']}/*.bt2 "
+        f"{config['reference_directory']}/*.fai"
     shell:
         """
         rm -rfv {params}

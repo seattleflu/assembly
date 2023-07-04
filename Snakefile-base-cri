@@ -123,7 +123,7 @@ rule trim_fastqs:
         trim_qscore = config["params"]["trimmomatic"]["trim_qscore"],
         minimum_length = config["params"]["trimmomatic"]["minimum_length"]
     benchmark:
-        "benchmarks/{sample}.trimmo"
+        f"{work_dir}/{assembly_subdir}/benchmarks/{{sample}}.trimmo"
     shell:
         f"""
         trimmomatic \

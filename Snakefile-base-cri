@@ -305,6 +305,7 @@ rule call_consensus:
         vcf = f"{work_dir}/{assembly_subdir}/process/vcfs/{{reference}}/{{sample}}.vcf"
     params:
         min_cov = config["params"]["varscan"]["min_cov"],
+        min_reads2 = config["params"]["varscan"]["min_reads2"],
         snp_qual_threshold = config["params"]["varscan"]["snp_qual_threshold"],
         snp_frequency = config["params"]["varscan"]["snp_frequency"]
     benchmark:
@@ -316,7 +317,7 @@ rule call_consensus:
             --min-coverage {params.min_cov} \
             --min-avg-qual {params.snp_qual_threshold} \
             --min-var-freq {params.snp_frequency} \
-            --min-read2 {params.min_reads2} \
+            --min-reads2 {params.min_reads2} \
             --strand-filter 0 \
             --variants 1 \
             --output-vcf 1 > {output.vcf}
@@ -354,7 +355,7 @@ rule vcf_to_consensus:
         f"{work_dir}/{assembly_subdir}/benchmarks/{{sample}}_{{reference}}.consensus"
     shell:
         f"""
-        mkdir -p "consensus_genomes/{{wildcards.reference}}"
+        mkdir -p "{work_dir}/{assembly_subdir}/consensus_genomes/{{wildcards.reference}}"
         cat {{input.ref}} | \
             bcftools consensus {{input.bcf}} \
                 --mask {{input.mask}} > \

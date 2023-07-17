@@ -499,9 +499,11 @@ def create_voc_reports(metadata: pd.DataFrame, excluded_vocs: str,
     vocs = vocs.groupby(['clade'], as_index = False).agg({'clade_pangolin': ';'.join, 'who': lambda x:';'.join(set(x))})
     exclude_ids = text_to_list(excluded_vocs)
 
-    voc_samples = metadata.loc[(metadata['clade'].isin(vocs['clade'])) & (~metadata['nwgc_id'].isna()) & (~metadata['nwgc_id'].isin(exclude_ids))]
-    voc_samples = voc_samples.merge(vocs, on=['clade'], how='inner')
-
+    # Format of clades values coming from NextClade changed. They no longer contain "(Omicron)", just the clade number and letter.
+    # Standardizing VoC values to match this format prior to joining.
+    vocs['clade_standardized'] = vocs['clade'].str.split(' ').str[0]
+    voc_samples = metadata.loc[(metadata['clade'].isin(vocs['clade_standardized'])) & (~metadata['nwgc_id'].isna()) & (~metadata['nwgc_id'].isin(exclude_ids))]
+    voc_samples = voc_samples.merge(vocs, left_on='clade', right_on='clade_standardized', how='inner', suffixes=('', '_y'))
     all_vocs_counts = voc_samples.groupby(['clade', 'clade_pangolin', 'who']).size().reset_index(name='counts')
     all_vocs_counts.to_csv(output_dir / f'{batch_name}_total_vocs.csv', index=False)
 
@@ -864,6 +866,7 @@ def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Pat
         'covv_subm_lab',
         'covv_subm_lab_addr',
         'covv_subm_sample_id',
+        'covv_consortium',
         'covv_authors'
     ]
 
@@ -1008,7 +1011,7 @@ def create_biosample_submission(metadata: pd.DataFrame, output_dir: Path, batch_
     metadata['organism'] = 'Severe acute respiratory syndrome coronavirus 2'
     metadata['host'] = 'Homo sapiens'
     metadata['host_disease'] = 'COVID-19'
-    metadata['isolation_source'] = 'clinical'
+    metadata['isolation_source'] = 'nasal swab'
 
     metadata[biosample_columns].to_csv(output_dir / f'{batch_name}_biosample.tsv', sep='\t', index=False)
     return metadata
@@ -1165,7 +1168,7 @@ if __name__ == '__main__':
     create_gisaid_submission(submit_metadata, args.fasta, output_dir, batch_name, args.gisaid_username, args.test_name)
 
     # Only create NCBI submissions for sequences that passed VADR
-    failed_nwgc_ids = [parse_fasta_id(id) for id in text_to_list(vadr_dir / 'genbank.vadr.fail.list')]
+    failed_nwgc_ids = [parse_fasta_id(id) for id in text_to_list(vadr_dir / 'genbank-sars-cov-2.vadr.fail.list')]
     ncbi_metadata = submit_metadata.loc[~submit_metadata['nwgc_id'].isin(failed_nwgc_ids)].copy(deep=True)
 
     biosample_metadata = create_biosample_submission(ncbi_metadata, output_dir, batch_name)

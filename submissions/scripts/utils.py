@@ -41,11 +41,19 @@ def process_with_nextclade(nextclade_dataset_dir:Path, output_tsv:Path, input_fa
     # nextclade uses dashes in `sars-cov-2` name but underscore for RSV
     if pathogen.startswith('rsv'):
         dataset = pathogen.replace('-', '_')
-    elif pathogen.startswith('flu'):
+    elif pathogen.startswith('flu-a'):
         assert subtype in ['h1n1', 'h3n2'], f"Error: unknown influenza subtype {subtype}"
         if subtype == 'h1n1':
             subtype += 'pdm'
         dataset = ('flu_' + subtype + '_ha')
+    elif pathogen.startswith('flu-b'):
+        dataset = 'flu_vic_ha'
+        ha_fasta_output = Path(input_fasta.parents[0], input_fasta.stem + '.fasta')
+        with open(ha_fasta_output, 'w') as ha_fasta:
+            for record in SeqIO.parse(input_fasta, 'fasta'):
+                if record.id.split('|').pop() == 'HA':
+                    SeqIO.write(record, ha_fasta, 'fasta-2line')
+        input_fasta = ha_fasta_output
     else:
         dataset = pathogen
 
@@ -244,8 +252,8 @@ def sequence_metrics(sequence: str, fasta_id: str, pathogen: str) -> dict:
         ref_length = 15225  # RSV-A reference genome
     elif pathogen=='rsv-b':
         ref_length = 15222  # RSV-B reference genome
-    elif pathogen=='flu-a':
-        ref_length = 15222  # FLU-A reference genome
+    elif pathogen=='flu-b':
+        ref_length = 9124  # FLU-B reference genome (EPI_ISL_983345: B/Austria/1359417/2021)
     metrics = {
         'CONTIG_NAME': fasta_id,
         'COUNT_A': sequence.count("A"),
@@ -589,18 +597,17 @@ def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
                 sys.exit(f"Found multiple metadata records for NWGC ID «{nwgc_id}»")
             if len(record_metadata) == 1:
                 record.id = record_metadata[0][record_id_col]
-
+                record.description = ""
                 if pathogen.startswith('rsv-'):
                     if 'bioproject_accession' in record_metadata[0]:
-
+                        record.description += f" [BioProject={record_metadata[0]['bioproject_accession']}] [BioSample={record_metadata[0]['accession']}] [organism=Human respiratory syncytial virus {pathogen.split('-').pop().upper()}]"
                     else:
                         sys.exit(f"BioProject and BioSample accessions required for RSV sequences")
 
-                record.description = 'testing??'
                 # If required, add tag for baseline samples
                 if (tag_baseline == True and
                     record_metadata[0]['baseline_surveillance'] == True):
-                    record.description = '[keyword=purposeofsampling:baselinesurveillance]'
+                    record.description += ' [keyword=purposeofsampling:baselinesurveillance]'
 
                 SeqIO.write(record, output, 'fasta-2line')
 

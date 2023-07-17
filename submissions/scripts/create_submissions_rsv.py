@@ -706,13 +706,8 @@ if __name__ == '__main__':
     if submit_metadata.empty:
         sys.exit(f"No new submissions:\n {metadata.groupby(['status'])['status'].count()}")
 
-    #create_gisaid_submission(submit_metadata, args.fasta, output_dir, batch_name, args.gisaid_username, args.test_name, args.subtype)
-
     # Only create NCBI submissions for sequences that passed VADR
-    #failed_nwgc_ids = [parse_fasta_id(id) for id in text_to_list(vadr_dir / f'genbank-{pathogen}.vadr.fail.list')]
     ncbi_metadata = submit_metadata.loc[~submit_metadata['nwgc_id'].isin(failed_nwgc_ids)].copy(deep=True)
 
     biosample_metadata = create_biosample_submission(ncbi_metadata, output_dir, batch_name, args.pathogen)
     biosample_metadata.to_csv(output_dir / f'biosample_metadata.csv', index=False)
-
-    #create_genbank_submission(biosample_metadata, args.fasta, output_dir, batch_name)

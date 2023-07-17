@@ -5,7 +5,7 @@ sequence identifiers.
 import argparse
 import pandas as pd
 from typing import List
-from create_submissions import IDENTIFIER_COLUMNS
+from create_submissions_sars_cov_2 import IDENTIFIER_COLUMNS
 
 
 def parse_identifiers(filename: str) -> pd.DataFrame:
@@ -122,5 +122,12 @@ if __name__ == '__main__':
     if args.genbank_accessions:
         genbank = parse_genbank(args.genbank_accessions)
         identifiers = merge_accessions(identifiers, genbank, 'genbank_accession')
+
+    # For consistency, adding ' (Omicron)' to clade name to match previous format from NextClade
+    identifiers.loc[identifiers.clade > '21J', 'clade'] = identifiers.clade + ' (Omicron)'
+    identifiers.loc[identifiers.clade.isin(['21A', '21I', '21J']), 'clade'] = identifiers.clade + ' (Delta)'
+    identifiers.loc[identifiers.clade == '20J', 'clade'] = '20J (Gamma, V3)'
+    identifiers.loc[identifiers.clade == '20H', 'clade'] = '20H (Beta, V2)'
+    identifiers.loc[identifiers.clade == '20I', 'clade'] = '20I (Alpha, V1)'
 
     identifiers[IDENTIFIER_COLUMNS].fillna('N/A').to_csv(args.output, sep='\t', index=False)

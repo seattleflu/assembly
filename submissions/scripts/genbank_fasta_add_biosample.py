@@ -34,5 +34,5 @@ if __name__ == '__main__':
         sequences = SeqIO.parse(original, 'fasta')
         for s in sequences:
             entry = accession_dict[s.id][s.id]
-            s.description = s.id + f" [Bioproject={entry['bioproject_accession']}] [BioSample={entry['accession']}] [organism={PATHOGEN_ORGANISM_MAP[args.pathogen]}]"
+            s.description = s.id + f" [BioProject={entry['bioproject_accession']}] [BioSample={entry['accession']}] [organism={PATHOGEN_ORGANISM_MAP[args.pathogen]}]"
             SeqIO.write(s, output, 'fasta-2line')

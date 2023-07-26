@@ -14,6 +14,8 @@ from datetime import datetime
 from export_lims_metadata import get_lims_sequencing_metadata, add_lims_metadata
 from extract_sfs_identifiers import read_all_identifiers, find_sfs_identifiers
 
+from aggregate_metrics import combine_metrics, append_metrics_counts
+
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
 logging.basicConfig(
@@ -111,79 +113,15 @@ if __name__ == '__main__':
     except Exception as err:
         LOG.error(f"There was a problem parsing sequences from {args.fasta}: \n{err}")
 
-    LOG.debug(f"Aggregating {len(args.metrics)} metrics files.")
 
-    PICARD_METRICS_COLS = [
-        'GENOME_TERRITORY',
-        'MEAN_COVERAGE',
-        'SD_COVERAGE',
-        'MEDIAN_COVERAGE',
-        'MAD_COVERAGE',
-        'PCT_EXC_ADAPTER',
-        'PCT_EXC_MAPQ',
-        'PCT_EXC_DUPE',
-        'PCT_EXC_UNPAIRED',
-        'PCT_EXC_BASEQ',
-        'PCT_EXC_OVERLAP',
-        'PCT_EXC_CAPPED',
-        'PCT_EXC_TOTAL',
-        'PCT_1X',
-        'PCT_5X',
-        'PCT_10X',
-        'PCT_15X',
-        'PCT_20X',
-        'PCT_25X',
-        'PCT_30X',
-        'PCT_40X',
-        'PCT_50X',
-        'PCT_60X',
-        'PCT_70X',
-        'PCT_80X',
-        'PCT_90X',
-        'PCT_100X',
-        'HET_SNP_SENSITIVITY',
-        'HET_SNP_Q',
-    ]
+    if yes_no_cancel("Combine metrics files?"):
+        LOG.debug("Combining metrics files")
 
-    metrics_df = pd.DataFrame()
+        metrics_df = append_metrics_counts(combine_metrics(args.metrics), args.fasta)
+        metrics_df.to_csv(OUTPUT_PATHS['metrics'], sep='\t', index=False)
 
-    for metrics_file in args.metrics:
-        # parse barcode from filename
-        identifier = Path(metrics_file).stem.split('.')[0]
+        LOG.debug(f"Combined metrics file saved to: {OUTPUT_PATHS['metrics']}")
 
-        # metrics TSV for each sample should be on lines 7 (headers) and 8 (data) of individual
-        # metrics files output by Picard
-        df = pd.read_csv(metrics_file, sep='\t', skiprows=6, nrows=1)
-
-        if not all(c in df.columns for c in PICARD_METRICS_COLS):
-            raise Exception(f"Metrics file {metrics_file} does not match expected columns: {', '.join(PICARD_METRICS_COLS)}")
-        elif df.empty:
-            raise Exception(f"Metrics file {metrics_file} does not contain expected TSV data.")
-
-        # insert sample id as first column and append to metrics dataframe
-        df.insert(0, 'SampleId', identifier)
-        metrics_df = metrics_df.append(df[PICARD_METRICS_COLS + ['SampleId']], ignore_index=True)
-
-    # GenBank's trimming script has a 50 character limit on ids, so we'll shorten them temporarily when trimming
-    # and then use this dict to map short ids back to long ids
-    original_record_ids = {}
-
-    # Calculate additional metrics from sequence and add to metrics dataframe
-    for record in sequences:
-        identifier = str(record.id.split('|')[0]).lower()
-        metrics = sequence_metrics(record.seq, record.id, args.pathogen)
-
-        # shorten identifiers to use with GenBank trimming script later
-        original_record_ids[identifier] = record.id
-        record.description = identifier
-        record.id = identifier
-
-        # update corresponding row with additional metrics
-        for k,v in metrics.items():
-            metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier, k] = str(v)
-
-    metrics_df.to_csv(OUTPUT_PATHS['metrics'], sep='\t', index=False)
-    LOG.debug(f"Combined metrics file saved to: {OUTPUT_PATHS['metrics']}")
 
     if yes_no_cancel("Process with NextClade?"):
         LOG.debug("Pulling data from NextClade")

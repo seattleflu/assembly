@@ -38,14 +38,6 @@ rule all:
         bamstats = expand(f"{work_dir}/{assembly_subdir}/summary/bamstats/{{reference}}/{{sample}}.coverage_stats.txt", filtered_product,
             sample=all_ids,
             reference=all_references),
-        consensus_genomes = expand(f"{work_dir}/{assembly_subdir}/consensus_genomes/{{reference}}/{{sample}}.consensus.fasta", filtered_product,
-            sample=all_ids,
-            reference=all_references
-        ),
-        #masked_consensus_genomes = expand(f"{work_dir}/{assembly_subdir}/consensus_genomes/{{reference}}/{{sample}}.masked_consensus.fasta", filtered_product,
-        #    sample=all_ids,
-        #    reference=all_references
-        #),
         aggregate = expand(f"{work_dir}/{assembly_subdir}/summary/aggregate/{{reference}}/{{sample}}.log", filtered_product,
                 sample=all_ids,
                 reference=all_references),

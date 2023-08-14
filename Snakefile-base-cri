@@ -356,8 +356,8 @@ rule vcf_to_consensus:
     shell:
         f"""
         mkdir -p "{work_dir}/{assembly_subdir}/consensus_genomes/{{wildcards.reference}}"
-        cat {{input.ref}} | \
             bcftools consensus {{input.bcf}} \
+                --fasta-ref {{input.ref}} \
                 --mask {{input.mask}} > \
             {{output.consensus_genome}}
         """

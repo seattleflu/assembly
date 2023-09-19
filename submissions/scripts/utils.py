@@ -46,6 +46,12 @@ def process_with_nextclade(nextclade_dataset_dir:Path, output_tsv:Path, input_fa
         if subtype == 'h1n1':
             subtype += 'pdm'
         dataset = ('flu_' + subtype + '_ha')
+        ha_fasta_output = Path(input_fasta.parents[0], input_fasta.stem + '.fasta')
+        with open(ha_fasta_output, 'w') as ha_fasta:
+            for record in SeqIO.parse(input_fasta, 'fasta'):
+                if record.id.split('|').pop() == 'HA':
+                    SeqIO.write(record, ha_fasta, 'fasta-2line')
+        input_fasta = ha_fasta_output
     elif pathogen.startswith('flu-b'):
         dataset = 'flu_vic_ha'
         ha_fasta_output = Path(input_fasta.parents[0], input_fasta.stem + '.fasta')
@@ -84,7 +90,7 @@ def process_with_nextclade(nextclade_dataset_dir:Path, output_tsv:Path, input_fa
 
 def pull_previous_submissions(output_tsv:Path, output_tsv_other:Path, pathogen:str) -> Path:
     SARS_COV_2_TSV_URL = "https://api.github.com/repos/seattleflu/hcov19-sequence-identifiers/contents/hcov19-sequence-identifiers.tsv"
-    OTHER_TSV_URL = "https://api.github.com/repos/seattleflu/sequence-identifiers/contents/sequence-identifiers.tsv"
+    OTHER_TSV_URL = "https://api.github.com/repos/seattleflu/rsv-flu-sequence-identifiers/contents/rsv-flu-sequence-identifiers.tsv"
 
     token = os.environ.get('GH_ACCESS_TOKEN') or getpass.getpass('Github Personal access token:')
 
@@ -380,14 +386,11 @@ def standardize_and_qc_external_metadata(metadata_filename:str, batch_date:datet
     exp_samples = external_metadata_metadata[external_metadata_metadata['lab_accession_id'].str.endswith('_exp', na=False)]
     exp_samples_samplify = external_metadata_samplify_fc_data[external_metadata_samplify_fc_data['Investigator\'s sample ID'].str.endswith('_exp', na=False)]
     if not exp_samples.empty:
-        print(f"Expirimental samples found: {len(exp_samples)}\n {exp_samples.to_string()}")
+        print(f"Experimental samples found: {len(exp_samples)}\n {exp_samples.to_string()}")
 
-        if yes_no_cancel("Drop expirimental samples?"):
+        if yes_no_cancel("Drop experimental samples?"):
             external_metadata_metadata.drop(exp_samples.index, inplace=True)
             external_metadata_samplify_fc_data.drop(exp_samples_samplify.index, inplace=True)
-        else:
-            external_metadata_metadata = exp_samples
-            external_metadata_samplify_fc_data = exp_samples_samplify
 
     # Identify and optionally remove cascadia samples
     cascadia_samples = external_metadata_metadata[external_metadata_metadata['county'].str.lower().str.strip() == 'cascadia']
@@ -591,7 +594,7 @@ def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
     with open(fasta, 'r') as original, open(output_fasta, 'w') as output:
         for record in SeqIO.parse(original, 'fasta'):
             nwgc_id = parse_fasta_id(record.id)
-            record_metadata = metadata.loc[metadata['nwgc_id'] == nwgc_id].to_dict('records')
+            record_metadata = metadata.loc[metadata['nwgc_id'].astype(str) == nwgc_id].to_dict('records')
             # This should never happen!
             if len(record_metadata) > 1:
                 sys.exit(f"Found multiple metadata records for NWGC ID «{nwgc_id}»")
@@ -608,7 +611,6 @@ def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
                 if (tag_baseline == True and
                     record_metadata[0]['baseline_surveillance'] == True):
                     record.description += ' [keyword=purposeofsampling:baselinesurveillance]'
-
                 SeqIO.write(record, output, 'fasta-2line')
 
 def parse_fasta_id(record_id: str) -> str:

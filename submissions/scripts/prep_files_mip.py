@@ -79,6 +79,7 @@ if __name__ == '__main__':
         'nextclade': Path(output_batch_dir,f'nextclade-{args.pathogen}.tsv'),
         'nextclade-data': Path(output_batch_dir, f'data/{args.pathogen}'),
         'vadr-dir': Path(output_batch_dir, f'genbank-{args.pathogen}'), #this one is a folder
+        'fasta-short-ids': Path(output_batch_dir, f'{args.pathogen}-short-ids.fa') # for now, create this file for every pathogen; however, it is only needed if GenBank trimming is performed, which should only be done for RSV.
     }
 
     # pathogen-specific outputs
@@ -117,7 +118,7 @@ if __name__ == '__main__':
     if yes_no_cancel("Combine metrics files?"):
         LOG.debug("Combining metrics files")
 
-        metrics_df = append_metrics_counts(combine_metrics(args.metrics), args.fasta)
+        metrics_df, original_record_ids = append_metrics_counts(combine_metrics(args.metrics, args.pathogen), args.fasta, OUTPUT_PATHS['fasta-short-ids'], args.pathogen)
         metrics_df.to_csv(OUTPUT_PATHS['metrics'], sep='\t', index=False)
 
         LOG.debug(f"Combined metrics file saved to: {OUTPUT_PATHS['metrics']}")
@@ -216,31 +217,31 @@ if __name__ == '__main__':
     if args.pathogen == 'sars-cov-2':
         calculate_excluded_vocs(nextclade_df, OUTPUT_PATHS['excluded-vocs'], identifier_format='sfs_sample_barcode')
 
-    if yes_no_cancel("Trim with GenBank script?"):
-        # The genbank trim script has a limit of 50 characters on identifiers; save a fasta file with just NWGC ids
-        #fasta_out = SeqIO.FastaIO.FastaWriter(OUTPUT_PATHS['fasta-short-ids'], wrap=None)
-        #fasta_out.write_file(sequences)
-        SeqIO.write(sequences, OUTPUT_PATHS['fasta-short-ids'], 'fasta-2line')
+    if not args.pathogen.startswith('flu'): # don't trim or run vadr for flu
+        if yes_no_cancel("Trim with GenBank script?"):
+            # The genbank trim script has a limit of 50 characters on identifiers; save a fasta file with just NWGC ids
+            #fasta_out = SeqIO.FastaIO.FastaWriter(OUTPUT_PATHS['fasta-short-ids'], wrap=None)
+            #fasta_out.write_file(sequences)
 
-        # Trim with GenBank's trimming script
-        result = Conda.run_command('run',
-            f'{os.path.realpath(os.path.dirname(__file__))}/fastaedit_public',
-            "-in", f"{OUTPUT_PATHS['fasta-short-ids']}",
-            "-trim_ambig_bases",
-            "-out_seq_file", f"{OUTPUT_PATHS['genbank-trimmed-fasta']}",
-            "-out", f"{OUTPUT_PATHS['genbank-trim-log']}"
-        )
+            # Trim with GenBank's trimming script
+            result = Conda.run_command('run',
+                f'{os.path.realpath(os.path.dirname(__file__))}/fastaedit_public',
+                "-in", f"{OUTPUT_PATHS['fasta-short-ids']}",
+                "-trim_ambig_bases",
+                "-out_seq_file", f"{OUTPUT_PATHS['genbank-trimmed-fasta']}",
+                "-out", f"{OUTPUT_PATHS['genbank-trim-log']}"
+            )
 
-        # Replace the shortened IDs with the original long IDs. GenBank's trim script adds a `lcl|` prefix to each ID
-        # which must be removed.
-        trimmed_records = list(SeqIO.parse(OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta'))
-        for r in trimmed_records:
-            r.id = r.description = original_record_ids[r.id.lstrip('lcl|')]
-        SeqIO.write(trimmed_records, OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta-2line')
+            # Replace the shortened IDs with the original long IDs. GenBank's trim script adds a `lcl|` prefix to each ID
+            # which must be removed.
+            trimmed_records = list(SeqIO.parse(OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta'))
+            for r in trimmed_records:
+                r.id = r.description = original_record_ids[r.id.lstrip('lcl|')]
+            SeqIO.write(trimmed_records, OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta-2line')
 
-        process_with_vadr(OUTPUT_PATHS['genbank-trimmed-fasta'], output_batch_dir, args.pathogen, interactive=True)
-    else:
-        process_with_vadr(OUTPUT_PATHS['fasta'], output_batch_dir, args.pathogen, interactive=True)
+            process_with_vadr(OUTPUT_PATHS['genbank-trimmed-fasta'], output_batch_dir, args.pathogen, interactive=True)
+        else:
+            process_with_vadr(OUTPUT_PATHS['fasta'], output_batch_dir, args.pathogen, interactive=True)
 
     print("Completed file prep.\n\n")
 

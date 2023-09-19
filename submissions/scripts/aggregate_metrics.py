@@ -17,7 +17,7 @@ logging.captureWarnings(True)
 LOG = logging.getLogger(__name__)
 LOG.setLevel(LOG_LEVEL)
 
-def combine_metrics(metrics_files: list) -> pd.DataFrame:
+def combine_metrics(metrics_files: list, pathogen:str) -> pd.DataFrame:
     LOG.debug(f"Aggregating {len(metrics_files)} metrics files.")
 
     PICARD_METRICS_COLS = [
@@ -52,6 +52,17 @@ def combine_metrics(metrics_files: list) -> pd.DataFrame:
         'HET_SNP_Q',
     ]
 
+    flu_segment_names = [
+        'HA',
+        'NA',
+        'NP',
+        'PA',
+        'PB1',
+        'PB2',
+        'MP',
+        'NS',
+    ]
+
     metrics_df = pd.DataFrame()
 
     for metrics_file in metrics_files:
@@ -66,13 +77,29 @@ def combine_metrics(metrics_files: list) -> pd.DataFrame:
         elif df.empty:
             raise Exception(f"Metrics file {metrics_file} does not contain expected TSV data.")
 
-        # insert sample id as first column and append to metrics dataframe
-        df.insert(0, 'SampleId', identifier)
-        metrics_df = metrics_df.append(df[PICARD_METRICS_COLS + ['SampleId']], ignore_index=True)
+        # for flu, create a metrics entry for each segment
+        # (Note that the Picard metrics are calculated per genome, not per segment, but the whole-genome metrics will be applied to each segment's entry, which is inaccurate but the best I can do right now)
+        if pathogen.startswith('flu'):
+            # parse sample id from filename
+            sampleid = Path(metrics_file).stem.split('.')[0]
+            for segment_name in flu_segment_names:
+                # make df fresh for each segment; probably a more efficient way to do this...
+                df = pd.read_csv(metrics_file, sep='\t', skiprows=6, nrows=1)
+                # identifier is sample id plus segment name
+                identifier = str(sampleid) + "|" + segment_name
+                # insert sample id as first column and append to metrics dataframe
+                df.insert(0, 'SampleId', identifier)
+                metrics_df = metrics_df.append(df[PICARD_METRICS_COLS + ['SampleId']], ignore_index=True)
+        else:
+            # parse sample id from filename
+            identifier = Path(metrics_file).stem.split('.')[0]            
+            # insert sample id as first column and append to metrics dataframe
+            df.insert(0, 'SampleId', identifier)
+            metrics_df = metrics_df.append(df[PICARD_METRICS_COLS + ['SampleId']], ignore_index=True)
     return metrics_df
 
 
-def append_metrics_counts(metrics_df:pd.DataFrame, fasta: str) -> pd.DataFrame:
+def append_metrics_counts(metrics_df:pd.DataFrame, fasta: str, fasta_short_ids: str, pathogen: str) -> pd.DataFrame:
     try:
         LOG.debug(f"Parsing FASTA file: {fasta}")
         sequences = list(SeqIO.parse(fasta, 'fasta'))
@@ -81,10 +108,23 @@ def append_metrics_counts(metrics_df:pd.DataFrame, fasta: str) -> pd.DataFrame:
 
     sequence_dict = {}
 
+    original_record_ids = {}
+
     # Calculate additional metrics from sequence and add to metrics dataframe
     for record in sequences:
-        identifier = str(record.id.split('|')[0]).lower()
+        split_identifier = record.id.split('|')
+        if pathogen.startswith('flu'):
+            # flu has multiple segments per sample, so need to include gene name in short id
+            identifier = str(split_identifier[0]).lower() + "|" + str(split_identifier[-1])
+        else:
+            identifier = str(record.id.split('|')[0]).lower()
         sequence = record.seq.upper()
+
+        # shorten identifiers to use with GenBank trimming script later
+        original_record_ids[identifier] = record.id
+        record.description = identifier
+        record.id = identifier
+        SeqIO.write(sequences, fasta_short_ids, 'fasta-2line')
 
         counts = {
             'COUNT_A': sequence.count("A"),
@@ -99,16 +139,21 @@ def append_metrics_counts(metrics_df:pd.DataFrame, fasta: str) -> pd.DataFrame:
         sequence_dict[identifier] = merged
 
     for identifier, counts in sequence_dict.items():
-        metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier, 'CONTIG_NAME'] = identifier
+        metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier.lower(), 'CONTIG_NAME'] = identifier
 
         for k,v in counts.items():
-            metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier, k] = str(v)
+            metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier.lower(), k] = str(v)
 
-        metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier, 'PCT_N_MAPPED'] = (counts['COUNT_N'] / counts['CONSENSUS_FASTA_LENGTH']) * 100
-        metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier, 'REFERENCE_LENGTH'] = metrics_df['GENOME_TERRITORY'].astype(int)
-        metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier, 'PCT_N_REFERENCE'] = (counts['COUNT_N'] / metrics_df['GENOME_TERRITORY']) * 100
+        # temporarily allow no-N sequences through so we can look at them further
+        if 'COUNT_N' not in counts:
+            print('Warning: ' + str(identifier) + ' does not contain Ns. Processing anyway.')
+            counts['COUNT_N'] = 0
 
-    return metrics_df.convert_dtypes()
+        metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier.lower(), 'PCT_N_MAPPED'] = (counts['COUNT_N'] / counts['CONSENSUS_FASTA_LENGTH']) * 100
+        metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier.lower(), 'REFERENCE_LENGTH'] = metrics_df['GENOME_TERRITORY'].astype(int)
+        metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier.lower(), 'PCT_N_REFERENCE'] = (counts['COUNT_N'] / metrics_df['GENOME_TERRITORY']) * 100
+
+    return metrics_df.convert_dtypes(), original_record_ids
 
 
 if __name__ == '__main__':

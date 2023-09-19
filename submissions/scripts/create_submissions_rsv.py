@@ -300,7 +300,7 @@ def add_clade_info(metadata: pd.DataFrame, nextclade_file: str, metadata_id: str
     return metadata.merge(nextclade[['nwgc_id', 'clade', 'g_clade']], left_on=metadata_id, right_on='nwgc_id', how='left')
 
 
-def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str], failed_nwgc_ids: List[str]) -> pd.DataFrame:
+def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str], failed_nwgc_ids: List[str], under_review_nwgc_ids: Optional[list]) -> pd.DataFrame:
     """
     Add a column "status" to the provided *metadata* that reflects the final
     status of the each sequence. The provided *prev_subs* is a set of `lab_accession_id`
@@ -316,6 +316,9 @@ def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str], failed_nwgc
     """
     # Default value is "submitted"
     metadata['status'] = 'submitted'
+
+    # Label samples being held for review (if the sample failed for other reasons, it will be marked with the other failure reason)
+    metadata.loc[metadata['nwgc_id'].isin(under_review_nwgc_ids), 'status'] = 'passed qc and under review'
 
     # Label samples missing collection date
     metadata.loc[metadata['collection_date'].isnull(), 'status'] = 'missing collection date'
@@ -657,6 +660,8 @@ if __name__ == '__main__':
         help = "Test name (MIPsSEQ)")
     parser.add_argument("--vadr-dir", type=str, required=True,
         help = "Path to directory of VADR output files")
+    parser.add_argument('--ids-to-hold-back', required=False,
+        help='NWGC IDs for assemblies to hold back from submitting. These will be marked with status "under review".', nargs='+')
 
     args = parser.parse_args()
 
@@ -675,8 +680,10 @@ if __name__ == '__main__':
 
     # only submitting those that pass VADR
     failed_nwgc_ids = [parse_fasta_id(id) for id in text_to_list(vadr_dir / f'genbank-{args.pathogen}.vadr.fail.list')]
+    # don't submit sequences that are being held back for review
+    under_review_nwgc_ids = args.ids_to_hold_back
 
-    metadata = add_sequence_status(metadata, prev_subs, failed_nwgc_ids)
+    metadata = add_sequence_status(metadata, prev_subs, failed_nwgc_ids, under_review_nwgc_ids)
     metadata = assign_strain_identifier(metadata, args.strain_id)
 
     # Check for duplicated strain names

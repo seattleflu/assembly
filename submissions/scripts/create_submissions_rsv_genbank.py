@@ -37,6 +37,6 @@ if __name__ == '__main__':
     biosample_metadata = pd.read_csv(args.biosample_metadata)
     biosample_accessions = pd.read_csv(args.biosample, sep='\t')
 
-    biosample_metadata_with_accessions = pd.merge(biosample_metadata, biosample_accessions, on='sample_name', lsuffix='', rsuffix="_2")
+    biosample_metadata_with_accessions = pd.merge(biosample_metadata, biosample_accessions, on='sample_name', suffixes=(None,'_2'))
 
     create_genbank_submission(biosample_metadata_with_accessions, args.fasta, Path(args.output_dir), args.batch_name, args.pathogen)

@@ -1,5 +1,5 @@
 # Submissions
-This directory contains the scripts and data to prepare assembled consensus genomes for submission to GISAID, GenBank, and WA DOH.
+This directory contains the scripts and data to prepare assembled consensus genomes for submission to GISAID, GenBank, WA DOH, and Oregon HA.
 
 ## Setup
 1. Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) if you don't already have [Conda](https://docs.conda.io/en/latest/) installed
@@ -7,12 +7,13 @@ This directory contains the scripts and data to prepare assembled consensus geno
     ```
     git clone https://github.com/seattleflu/assembly.git
     ```
-1. Clone this repo:
+1. Clone these repos:
     ```
     git clone https://github.com/seattleflu/hcov19-sequence-identifiers.git
+    git clone https://github.com/seattleflu/rsv-flu-sequence-identifiers.git
     ```
-    Ask the dev team on #informatics if permission is restricted
-3. Create conda environment for submissions:
+    Ask the `@dev-team` if permission is restricted
+1. Create conda environment for submissions:
     ```
     conda env create -f ./envs/submissions.yaml
     ```
@@ -21,10 +22,11 @@ This directory contains the scripts and data to prepare assembled consensus geno
 1. Install [Docker](https://docs.docker.com/get-docker/)
 1. Follow [instructions](https://github.com/seattleflu/documentation/wiki/Linelists#connect-to-the-production-id3c-database) to set up connection to ID3C.
     - Ask `@dev-team` to grant your user the `assembly-exporter` role within ID3C
+1. Ask `@dev-team` to grant and provide instructions for access to LIMS API.
 1. Create an account for [GISAID](https://www.gisaid.org/)
 1. Create an account for [NCBI](https://www.ncbi.nlm.nih.gov/) (You can create an account linked to your UW net id)
-1. Ping Jover to get added to the NCBI SFS submissions group.
-1. Ping Melissa or Jover to reach out to WA DOH to set up new account for SFT.
+1. Ask `@dev-team` to be added to the NCBI SFS submissions group.
+1. Ask `@dev-team` to reach out to WA DOH to set up new account for SFT.
 
 
 ## Data
@@ -34,6 +36,7 @@ Files stored in the `source-data/` directory are:
 * `authors/` subdirectory contains separate files that lists all the authors for each sample source.
 These files are named with their respective sources:
     * `altius.txt`
+    * `cascadia.txt`
     * `scan.txt`
     * `sfs.txt`
     * `wa-doh.txt`
@@ -50,132 +53,161 @@ This is used to create the appropriate strain name based on the sample's origina
 * `variants_of_concern.tsv` contains mapping of variants of concerns for the clade name from Nextclade, WHO, and Pangolin.
 
 * `washington_counties.txt` contains a list of all counties in the state of Washington.
-This will be used to flag samples with counties that are from outside of Washington.
+
+* `oregon_counties.txt` contains a list of all counties in the state of Oregon.
 
 
 ## Submission Process
 
-Example commands and filenames are based on sequence flow cell `AAAKJKHM5` released on `2021-07-01`
+1. Transfer the assembly results from S3 to you local machine:
+    Consensus genomes:
+    - [s3-folder]/assembly/consensus_genomes/sars-cov-2.all-samples.masked_consensus.fasta
+    - [s3-folder]/assembly/consensus_genomes/rsv-a.all-samples.masked_consensus.fasta
+    - [s3-folder]/assembly/consensus_genomes/rsv-b.all-samples.masked_consensus.fasta
+    - [s3-folder]/assembly/consensus_genomes/flu-a-h1n1.all-samples.masked_consensus.fasta
+    - [s3-folder]/assembly/consensus_genomes/flu-a-h3n2.all-samples.masked_consensus.fasta
+    - [s3-folder]/assembly/consensus_genomes/flu-b.all-samples.masked_consensus.fasta
 
-1. A member of NWGC will ping `#data-transfer-nwgc` channel in SFS Slack when a new sequence batch is available on Globus.
-1. Transfer assembly results from [NWGC Globus endpoint](https://app.globus.org/file-manager?origin_id=178d2980-769b-11e9-8e59-029d279f7e24&origin_path=%2Fseattle_flu_project%2Fivar_releases%2F) to the Fred Hutch rhino cluster (if applicable), otherwise to your local computer.
-1. Create directory for unzipping the .tar.gz file
+    Picard metrics:
+    - [s3-folder]/assembly/summary/picard/sars-cov-2/*
+    - [s3-folder]/assembly/summary/picard/rsv-a/*
+    - [s3-folder]/assembly/summary/picard/rsv-b/*
+    - [s3-folder]/assembly/summary/picard/flu-a-h1n1/*
+    - [s3-folder]/assembly/summary/picard/flu-a-h3n2/*
+    - [s3-folder]/assembly/summary/picard/flu-b/*
+
+1. Run file prep script
     ```
-    mkdir /fh/fast/bedford_t/seattleflu/ivar-releases/20210701_fastq
+    python3 ./submissions/scripts/prep_files_mip.py \
+        --fasta [path to FASTA file]
+        --metrics [Picard metrics files]
+        --output-dir [path to output directory]
+        --batch-date YYYYMMDD
+        --metadata-file [path to external metadata XLSX file]
+        --pathogen [pathogen]
+        --subtype [subtype]
     ```
-1. Extract .tar.gz file:
-    ```
-    tar -xvzf AAAKJKHM5.tar.gz -C /fh/fast/bedford_t/seattleflu/ivar-releases/20210701_fastq
-    ```
-    _Skip the next two steps if you are not working from the FH rhino cluster_
-1. Create a local directory to hold all files related to this batch of sequences:
-    ```
-    mkdir ~/Documents/ivar-releases/Batch-20210701
-    ```
-1. Copy the FASTA and metrics TSV to local directory
-    ```
-    scp joverlee@rhino.fhcrc.org:/fh/fast/bedford_t/seattleflu/ivar-releases/20210701_fastq/AAAKJKHM5.fa ~/Documents/ivar-releases/Batch-20210701/
-    scp joverlee@rhino.fhcrc.org:/fh/fast/bedford_t/seattleflu/ivar-releases/20210701_fastq/AAAKJKHM5.metrics.tsv ~/Documents/ivar-releases/Batch-20210701/
-    ```
-1. Drag and drop the FASTA file to [NextClade](https://clades.nextstrain.org/)
-1. Do a quick scan of the sequences on NextClade to note any abnormal sequences:
-    - sequences assigned to early 19A/19B clades should be twist positive controls or sequences that have been masked with majority Ns
-    - sequences that are VoCs should have major defining S gene mutations listed in [CoVariants](https://covariants.org/)
-        - if major defining mutations are masked with Ns, add the NWGC id to `~/Documents/ivar-releases/Batch-20210701/excluded-vocs.txt`
-1. Download the NextClade TSV and save as `~/Documents/ivar-releases/Batch-20210701/nextclade.tsv`.
-4. Pull down the [latest Docker image for VADR](https://hub.docker.com/r/staphb/vadr) maintained by StaPH-B
-    ```
-    docker pull staphb/vadr
-    ```
-1. Run the sequences through the NCBI VADR program by running:
-    ```
-    ./submissions/scripts/run_vadr ~/Documents/ivar-releases/Batch-20210701/ AAAKJKHM5.fa
-    ```
-    - If you run into permission denied error, make the script executable by running:
-        ```
-        chmod +x ./submissions/scripts/run_vadr
-        ```
-    - This will create a sub-directory `~/Documents/ivar-releases/Batch-20210701/genbank/` with all output files from VADR
-1. Download the metadata Excel file from SFS Slack and save as `~/Documents/ivar-releases/Batch-20210701/external-metadata.xlsx`
-    - The metadata file is usually in the original thread in the `#data-transfer-nwgc` channel
-    - Ping Erika for the metadata file if it has not already been posted on Slack.
-1. Check the metadata in the `Metadata` or first sheet:
-    - All external samples should have collection dates
-    - A majority of external samples should have county.
-    (It's fine if some are missing county, they will be assumed to be from Washington state)
-    - There should _not_ be any dates earlier than February 2020
-    - The dates should _not_ all be identical
-1. Report missing or erroneous metadata to Erika to verify and correct.
-1. If there are SFS/SCAN samples listed in the metadata sheet, create a CSV of SFS sample barcodes by running:
-    ```
-    python3 ./submissions/scripts/extract_sfs_identifiers.py \
-        --metadata ~/Documents/ivar-releases/Batch-20210701/external-metadata.xlsx \
-        --output ~/Documents/ivar-releases/Batch-20210701/sfs-sample-barcodes.csv
-    ```
-1. If there are incorrectly formatted barcodes are printed to stdout (open the file in a NON-Excel text editor):
-    - Try to find the correct barcode by looking up the associated NWGC ID in the Metabase [NWGC ID lookup query](https://backoffice.seattleflu.org/metabase/question/641).
-    - Try to find the correct barcode by looking up the barcode in the Metabase [Unknown barcode query](https://backoffice.seattleflu.org/metabase/question/439)
-    - Ping Machiko to confirm and correct barcodes in the Excel metadata file.
-    - Re-run the previous step after correcting Excel metadata file
-1. Export SFS/SCAN metadata from ID3C by running:
-    ```
-    PGSERVICE=seattleflu-production ./submissions/scripts/export_id3c_metadata \
-        ~/Documents/ivar-releases/Batch-20210701/sfs-sample-barcodes.csv > ~/Documents/ivar-releases/Batch-20210701/id3c-metadata-with-county.csv
-    ```
-1. Check the ID3C metadata include collection dates for all samples (open the file in a NON-Excel text editor).
+    - pathogen values: `sars-cov-2`, `rsv-a`, `rsv-b`, `flu-a`, or `flu-b`
+    - subtype values (only applicable to `flu-a`, otherwise omit): `h1n1`, `h3n2`
+
+1. Follow prompts to include/exclude specific sets of records or individual file preparation steps as needed (use defaults for standard use case).
+
+1. Review outputs of file prep script. Investigate missing or erroneous metadata.
+
+1. Check that LIMS and ID3C metadata files include collection dates for all samples (open the file in a NON-Excel text editor).
     - collection date may be missing if metadata has not been ingested into ID3C yet
     - ping `@dev-team` in `#informatics` with SFS sample barcodes if missing collection dates
     - submission of sequences missing collection date will have to be delayed
-1. Download the latest TSV of sequences from [GitHub](https://github.com/seattleflu/hcov19-sequence-identifiers/blob/master/hcov19-sequence-identifiers.tsv) and save as `~/Documents/ivar-releases/previous-submissions.tsv`
+
+1. Download the latest TSV of sequences from Github:
+
+     [SARS-CoV-2](https://github.com/seattleflu/hcov19-sequence-identifiers/blob/master/hcov19-sequence-identifiers.tsv): save as `[output-folder]/sars-cov-2-previous-submissions.tsv`
+
+     or
+
+     [RSV and flu](https://github.com/seattleflu/rsv-flu-sequence-identifiers/blob/master/rsv-flu-sequence-identifiers.tsv): save as `[output-folder]/rsv-flu-previous-submissions.tsv`
+
 1. Create submission files by running:
+
+    SARS-CoV-2:
     ```
-    python3 ./submissions/scripts/create_submissions.py \
-        --batch-name 20210701 \
-        --metadata ~/Documents/ivar-releases/Batch-20210701/external-metadata.xlsx \
-        --id3c-metadata ~/Documents/ivar-releases/Batch-20210701/id3c-metadata-with-county.csv \
-        --metrics ~/Documents/ivar-releases/Batch-20210701/AAAKJKHM5.metrics.tsv \
-        --nextclade ~/Documents/ivar-releases/Batch-20210701/nextclade.tsv \
-        --previous-submissions ~/Documents/ivar-releases/previous-submissions.tsv \
-        --strain-id 9161
-        --fasta ~/Documents/ivar-releases/Batch-20210701/AAAKJKHM5.fa \
-        --gisaid-username joverlee
-        --output-dir ~/Documents/ivar-releases/Batch-20210701/ \
-        --excluded-vocs ~/Documents/ivar-releases/Batch-20210701/excluded-vocs.txt \
-        --vadr-dir ~/Documents/ivar-releases/Batch-20210701/genbank
+    python3 ./submissions/scripts/create_submissions_sars_cov_2.py \
+        --batch-name [YYYYMMDD] \
+        --metadata [batch-dir]/external-metadata.xlsx \
+        --id3c-metadata [batch-dir]/id3c-metadata-with-county.csv \
+        --metrics [batch-dir]/[pathogen]-metrics.tsv \
+        --nextclade [batch-dir]/nextclade-[pathogen].tsv \
+        --previous-submissions [batch-dir]/sars-cov-2-previous-submissions.tsv \
+        --previous-submissions-rsv-flu [batch-dir]/rsv-flu-previous-submissions.tsv \
+        --strain-id #####
+        --fasta [batch-dir]/[FASTA-filename].fa \
+        --gisaid-username [your username]
+        --output-dir [batch-dir]/ \
+        --excluded-vocs [batch-dir]/excluded-vocs.txt \
+        --test-name MIPsSEQ \
+        --vadr-dir [batch-dir]/genbank-[pathogen]
     ```
-    __NOTE__: Replace both the GISAID username and the strain ID.
-        - The strain ID should be the next integer after the last strain name in the previous submissions.
-1. Share reports of SFS VoCs to study point people following the VoC Reporting SOP pinned in `#sequencing`
-    - reports are CSV files with the study name in the filename, e.g. `20210701_SCAN_vocs.csv`
-1. Post total VoC counts in `20210701_total_vocs.csv` to `#sequencing`
-2. Share count of >10% Ns, control, failed, and submitted and attach files, e.g `20210701_sample_status.csv` to `#assembly`
-3. Submit sequences to [GISAID](https://www.gisaid.org/).
+
+    RSV:
+    ```
+    python3 ./submissions/scripts/create_submissions_rsv.py \
+        --batch-name [YYYYMMDD] \
+        --metadata [batch-dir]/external-metadata.xlsx \
+        --id3c-metadata [batch-dir]/id3c-metadata-with-county.csv \
+        --lims-metadata [batch-dir]/lims-metadata-with-county.csv \
+        --metrics [batch-dir]/[pathogen]-metrics.tsv \
+        --nextclade [batch-dir]/nextclade-[pathogen].tsv \
+        --previous-submissions [batch-dir]/rsv-flu-previous-submissions.tsv \
+        --previous-submissions-sars-cov-2 [batch-dir]/sars-cov-2-previous-submissions.tsv \
+        --strain-id #####
+        --fasta [batch-dir]/[FASTA-filename].fa \
+        --gisaid-username [your username]
+        --output-dir [batch-dir]/ \
+        --test-name MIPsSEQ \
+        --pathogen [pathogen] \
+        --vadr-dir [batch-dir]/genbank-[pathogen]
+    ```
+    - pathogen values: `rsv-a`, `rsv-b`
+
+    Influenza:
+    ```
+    python3 ./submissions/scripts/create_submissions_flu.py \
+        --batch-name [YYYYMMDD] \
+        --metadata [batch-dir]/external-metadata.xlsx \
+        --id3c-metadata [batch-dir]/id3c-metadata-with-county.csv \
+        --lims-metadata [batch-dir]/lims-metadata-with-county.csv \
+        --metrics [batch-dir]/metrics.tsv \
+        --nextclade [batch-dir]/nextclade.tsv \
+        --previous-submissions [batch-dir]/rsv-flu-previous-submissions.tsv \
+        --previous-submissions-sars-cov-2 [batch-dir]/sars-cov-2-previous-submissions.tsv \
+        --strain-id #####
+        --fasta [batch-dir]/AAAKJKHM5.fa \
+        --gisaid-username [your username]
+        --output-dir [batch-dir]/ \
+        --test-name MIPsSEQ \
+        --pathogen [pathogen] \
+        --subtype [subtype]
+    ```
+    - pathogen values: `flu-a`, `flu-b`
+    - subtype values (only applicable to `flu-a`): `h1n1`, `h3n2`
+
+    __NOTE__: Replace the batch-dir, ,GISAID username, the strain ID, pathogen and subtype (where applicable).
+        - The strain ID should be the next integer after the last strain name in the previous submissions, and there should be no overlap in strain names beween the two previous submission files.
+
+1. Share reports of SFS SARS-CoV-2 VoCs to study point people following the SARS-CoV-2 VoC Reporting SOP pinned in `#sequencing`
+    - reports are CSV files with the study name in the filename, e.g. `YYYYMMDD_SCAN_vocs.csv`
+
+1. Post total SARS-CoV-2 VoC counts in `YYYYMMDD_total_vocs.csv` to `#sequencing`
+
+1. Share count of >10% Ns, control, failed, and submitted and attach files, e.g `YYYYMMDD_sample_status.csv` to `#assembly`
+
+1. For SARS-CoV-2, submit sequences to [GISAID](https://www.gisaid.org/).
     - Navigate to the EpiCoV:tm: tab.
     - Click on "Upload" and select "Batch Upload" in the pop-up.
-    - Upload `SFS_20210701_EpiCoV_BulkUpload.csv` and `SFS_20210701_EpiCoV_BulkUpload.fasta` files.
+    - Upload `SFS_YYYYMMDD_EpiCoV_BulkUpload.csv` and `SFS_YYYYMMDD_EpiCoV_BulkUpload.fasta` files.
     - Select "Notify me only about NOT PREVIOUSLY REPORTED FRAMESHIFTS in this submission for reconfirmation of affected sequences"
 
-4. Submit sample data to [BioSample](https://submit.ncbi.nlm.nih.gov/subs/biosample/)
-    - Follow instructions in [NCBI protocol](https://www.protocols.io/view/sars-cov-2-ncbi-submission-protocol-sra-biosample-bui7nuhn) (ignore instructions for SRA submissions, we are currently not submitting to SRA)
-    - Upload `20210701_biosample.tsv` to the "Attributes" tab
-5. If there were SCH samples in this batch of sequences, email SCH the sequencing results:
-    - Email `Batch_20210701_SCH_sequencing_results.xlsx` to SCH as an encrypted email.
+1. Submit sample data to [BioSample](https://submit.ncbi.nlm.nih.gov/subs/biosample/)
+    - Follow instructions in [NCBI protocol](https://www.protocols.io/view/sars-cov-2-ncbi-submission-protocol-sra-biosample-14egn8ydmg5d/v5) (ignore instructions for SRA submissions, we are currently not submitting to SRA)
+    - Upload `YYYYMMDD_biosample.tsv` to the "Attributes" tab
+1. If there were SCH samples in this batch of sequences, email SCH the sequencing results:
+    - Email `Batch_YYYYMMDD_SCH_sequencing_results.xlsx` to SCH as an encrypted email.
     - SCH will fill in the original lab accession id and upload to WA DOH SFT
-6. Submit sequencing results to [WA DOH SFT](https://sft.wa.gov/)
-    - Upload `Batch_20210701_sequencing_results.xlsx` to the `NW_Genomics` folder
-7. BioSample will send an email when accessions are available for download.
+1. Submit sequencing results to [WA DOH SFT](https://sft.wa.gov/)
+    - Upload `Batch_YYYYMMDD_sequencing_results.xlsx` to the `NW_Genomics` folder
+1. BioSample will send an email when accessions are available for download.
     - Go to the ["My Submissions" page](https://submit.ncbi.nlm.nih.gov/subs/)
-    - Download the "attributes file with BioSample accessions" and save as `~/Documents/ivar-releases/Batch-20210701/biosample_accessions.tsv`
-8. Link BioSample accessions to the GenBank submissions metadata by running:
+    - Download the "attributes file with BioSample accessions" and save as `~/Documents/ivar-releases/Batch-YYYYMMDD/biosample_accessions.tsv`
+1. Link BioSample accessions to the GenBank submissions metadata by running:
     ```
     python3 ./submissions/scripts/add_biosample_accessions.py \
-        --biosample ~/Documents/ivar-releases/Batch-20210701/biosample_accessions.tsv \
-        --genbank ~/Documents/ivar-releases/Batch-20210701/20210701_*_genbank_metadata.tsv
+        --biosample [batch-dir]/biosample_accessions.tsv \
+        --genbank [batch-dir]/YYYYMMDD_*_genbank_metadata.tsv
     ```
 1. Submit sequences to [GenBank](https://submit.ncbi.nlm.nih.gov/subs/genbank/)
-    - Follow instructions in [NCBI protocol](https://www.protocols.io/view/sars-cov-2-ncbi-consensus-submission-protocol-genb-bid7ka9n?step=2)
-    - Create a separate submission for each submission group (SFS, SCAN, WA DOH) since they have different authors
-    - There should be a separate TSV and FASTA file for each submission group, e.g. `20210701_scan_genbank_metadata_with_biosample.tsv` and `20210701_scan_genbank.fasta`
+    - Follow instructions in [NCBI protocol](https://www.protocols.io/view/sars-cov-2-ncbi-consensus-submission-protocol-genb-n92ldy1w9l5b/v3)
+    - Create a separate submission for each submission group (SFS, SCAN, WA DOH, Cascadia) since they have different authors
+    - There should be a separate TSV and FASTA file for each submission group, e.g. `YYYYMMDD_scan_genbank_metadata_with_biosample.tsv` and `YYYYMMDD_scan_genbank.fasta`
 1. GISAID will send an email with accession numbers when the sequences have been published.
 Search for these accession numbers to get mapping between strain name and GISAID accessions:
     - Navigate to the EpiCoV:tm: tab.
@@ -185,21 +217,21 @@ Search for these accession numbers to get mapping between strain name and GISAID
     - Click "OK" to select these sequences
     - Click "Download" in the lower right hand corner
     - Select "Patient status metadata" and click "Download" in the pop-up box
-    - Save file as `~/Documents/ivar-releases/Batch-20210701/gisaid_accessions.tsv`
+    - Save file as `[batch-dir]/gisaid_accessions.tsv`
 1. GenBank will send an email when sequences have been published.
     - Go to the GenBank submission portal
     - Find the submissions for this batch and download the "AccessionReport.tsv" for each submission
-    - Save the files as `~/Documents/ivar-releases/Batch-20210701/genbank_accessions_{1|2|3}.tsv`
+    - Save the files as `[batch-dir]/genbank_accessions_{1|2|3}.tsv`
 1. Merge accessions with identifiers by running:
     ```
     python3 ./submissions/scripts/merge_identifiers.py \
-        --identifiers ~/Documents/ivar-releases/Batch-20210701identifiers.tsv \
-        --gisaid-accessions ~/Documents/ivar-releases/Batch-20210701/gisaid_accessions.tsv \
-        --genbank-accessions ~/Documents/ivar-releases/Batch-20210701/genbank_accessions_1.tsv ~/Documents/ivar-releases/Batch-20210701/genbank_accessions_2.tsv ~/Documents/ivar-releases/Batch-20210701/genbank_accessions_3.tsv
-        --output ~/Documents/ivar-releases/Batch-20210701/identifiers_with_accessions.tsv
+        --identifiers [batch-dir]/identifiers.tsv \
+        --gisaid-accessions [batch-dir]/gisaid_accessions.tsv \
+        --genbank-accessions [batch-dir]/genbank_accessions_*.tsv
+        --output [batch-dir]/identifiers_with_accessions.tsv
     ```
-1. Copy the identifiers from `~/Documents/ivar-releases/Batch-20210701/identifiers_with_accessions.tsv` and append them to the TSV in the
-[hcov19 identifiers repo](https://github.com/seattleflu/hcov19-sequence-identifiers)
+1. Copy the identifiers from `[batch-dir]/identifiers_with_accessions.tsv` and append them to the TSV in the
+[hcov19 identifiers repo](https://github.com/seattleflu/hcov19-sequence-identifiers) or [rsv-flu identifiers repo](https://github.com/seattleflu/rsv-flu-sequence-identifiers)
 1. Push the new identifiers up the master branch of the repo.
 This will email Krisandra from WA DOH that new sequence identifiers have been added.
 

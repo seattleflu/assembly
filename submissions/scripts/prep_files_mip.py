@@ -9,8 +9,12 @@ import pandas as pd
 from Bio import SeqIO
 from utils import *
 import shutil
+from datetime import datetime
 
-from export_lims_metadata import get_lims_sequencing_metadata
+from export_lims_metadata import get_lims_sequencing_metadata, add_lims_metadata
+from extract_sfs_identifiers import read_all_identifiers, find_sfs_identifiers
+
+from aggregate_metrics import combine_metrics, append_metrics_counts
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
@@ -36,6 +40,12 @@ if __name__ == '__main__':
         help = "Output directory")
     parser.add_argument("--batch-date", required=True,
         help = "Date in YYYYMMDD format")
+    parser.add_argument("--metadata-file", required=True,
+        help = "File path to metadata Excel file (.xlsx)")
+    parser.add_argument("--pathogen", type=str, required=True,
+        choices=['sars-cov-2', 'rsv-a', 'rsv-b', 'flu-a', 'flu-b'])
+    parser.add_argument("--subtype", type=str, required=False,
+        choices=['h1n1', 'h3n2'])
     args = parser.parse_args()
 
     try:
@@ -48,31 +58,55 @@ if __name__ == '__main__':
     # check that output directory doesn't already exist
     output_batch_dir = Path(args.output_dir, batch_dir_name)
     if os.path.isdir(output_batch_dir):
-        if yes_no_cancel("Output batch folder already exists: {output_batch_dir}. Do you really want to proceed?"):
+        if yes_no_cancel(f"Output batch folder already exists: {output_batch_dir}. Do you really want to proceed?"):
             output_batch_dir.mkdir(parents=True, exist_ok=True)
         else:
             raise FileExistsError(f"Output batch folder already exists: {output_batch_dir}. Aborting.")
     else:
         output_batch_dir.mkdir(parents=True, exist_ok=True)
 
+    # shared outputs for all pathogens
     OUTPUT_PATHS = {
-        'nextclade': Path(output_batch_dir,'nextclade.tsv'),
-        'nextclade-sars-cov-2': Path(output_batch_dir, 'data/sars-cov-2'),
-
-        'fasta': Path(output_batch_dir, Path(args.fasta).stem).with_suffix('.fa'),
-        'metrics': Path(output_batch_dir, 'metrics.tsv'),
+        'fasta': Path(output_batch_dir, args.pathogen).with_suffix('.fa'),
         'lims-metadata': Path(output_batch_dir, 'lims-metadata-with-county.csv'),
+        'id3c-metadata': Path(output_batch_dir, 'id3c-metadata-with-county.csv'),
+        'id3c-sample-barcodes': Path(output_batch_dir, 'id3c-sample-barcodes.csv'),
+        'lims-sample-barcodes': Path(output_batch_dir, 'lims-sample-barcodes.csv'),
+        'metadata': Path(output_batch_dir, 'external-metadata.xlsx'),
 
-        'previous-submissions': Path(output_batch_dir, 'previous-submissions.tsv'),
-        'excluded-vocs': Path(output_batch_dir, 'excluded-vocs.txt'),
-        'vadr-dir': Path(output_batch_dir, 'genbank'), #this one is a folder
-
-        'sfs-retro-sample-barcodes': Path(output_batch_dir, 'sfs-retro-sample-barcodes.csv'),
+        # pathogen-specific outputs
+        'metrics': Path(output_batch_dir, f'{args.pathogen}-metrics.tsv'),
+        'nextclade': Path(output_batch_dir,f'nextclade-{args.pathogen}.tsv'),
+        'nextclade-data': Path(output_batch_dir, f'data/{args.pathogen}'),
+        'vadr-dir': Path(output_batch_dir, f'genbank-{args.pathogen}'), #this one is a folder
+        'fasta-short-ids': Path(output_batch_dir, f'{args.pathogen}-short-ids.fa') # for now, create this file for every pathogen; however, it is only needed if GenBank trimming is performed, which should only be done for RSV.
     }
+
+    # pathogen-specific outputs
+    if args.pathogen == 'sars-cov-2':
+        OUTPUT_PATHS.update({
+            'previous-submissions': Path(output_batch_dir, 'sars-cov-2-previous-submissions.tsv'),
+            'previous-submissions-other': Path(output_batch_dir, 'rsv-flu-previous-submissions.tsv'),
+            'excluded-vocs': Path(output_batch_dir, 'excluded-vocs.txt'),
+        })
+    else:
+        OUTPUT_PATHS.update({
+            'previous-submissions': Path(output_batch_dir, 'rsv-flu-previous-submissions.tsv'),
+            'previous-submissions-other': Path(output_batch_dir, 'sars-cov-2-previous-submissions.tsv'),
+            'fasta-short-ids': Path(output_batch_dir, f'{args.pathogen}-short-ids.fa'),
+            'genbank-trimmed-fasta': Path(output_batch_dir, f'{args.pathogen}-genbank-trimmed.fa'),
+            'genbank-trim-log': Path(output_batch_dir, f'{args.pathogen}-genbank-trim.xml'),
+        })
+
+    # for some reason this value is sometimes a tuple where the second value is blank
+    if isinstance(OUTPUT_PATHS['previous-submissions'], tuple):
+        OUTPUT_PATHS['previous-submissions'] = OUTPUT_PATHS['previous-submissions'][0]
+
+    standardize_and_qc_external_metadata(args.metadata_file, batch_date, OUTPUT_PATHS['metadata'])
 
     try:
         LOG.debug(f"Parsing FASTA file: {args.fasta}")
-        sequences = SeqIO.parse(args.fasta, 'fasta')
+        sequences = list(SeqIO.parse(args.fasta, 'fasta'))
 
         # save FASTA file to output location
         shutil.copyfile(args.fasta, OUTPUT_PATHS['fasta'])
@@ -81,79 +115,23 @@ if __name__ == '__main__':
         LOG.error(f"There was a problem parsing sequences from {args.fasta}: \n{err}")
 
 
-    LOG.debug(f"Aggregating {len(args.metrics)} metrics files.")
-    PICARD_METRICS_COLS = [
-        'GENOME_TERRITORY',
-        'MEAN_COVERAGE',
-        'SD_COVERAGE',
-        'MEDIAN_COVERAGE',
-        'MAD_COVERAGE',
-        'PCT_EXC_ADAPTER',
-        'PCT_EXC_MAPQ',
-        'PCT_EXC_DUPE',
-        'PCT_EXC_UNPAIRED',
-        'PCT_EXC_BASEQ',
-        'PCT_EXC_OVERLAP',
-        'PCT_EXC_CAPPED',
-        'PCT_EXC_TOTAL',
-        'PCT_1X',
-        'PCT_5X',
-        'PCT_10X',
-        'PCT_15X',
-        'PCT_20X',
-        'PCT_25X',
-        'PCT_30X',
-        'PCT_40X',
-        'PCT_50X',
-        'PCT_60X',
-        'PCT_70X',
-        'PCT_80X',
-        'PCT_90X',
-        'PCT_100X',
-        'HET_SNP_SENSITIVITY',
-        'HET_SNP_Q',
-    ]
+    if yes_no_cancel("Combine metrics files?"):
+        LOG.debug("Combining metrics files")
 
-    metrics_df = pd.DataFrame()
-    LOG.debug(f"Processing metrics files: {', '.join(args.metrics)}")
+        metrics_df, original_record_ids = append_metrics_counts(combine_metrics(args.metrics, args.pathogen), args.fasta, OUTPUT_PATHS['fasta-short-ids'], args.pathogen)
+        metrics_df.to_csv(OUTPUT_PATHS['metrics'], sep='\t', index=False)
 
-    for metrics_file in args.metrics:
-        # parse barcode from filename
-        identifier = Path(metrics_file).stem.split('.')[0]
-
-        # metrics TSV for each sample should be on lines 7 (headers) and 8 (data) of individual
-        # metrics files output by Picard
-        df = pd.read_csv(metrics_file, sep='\t', skiprows=6, nrows=1)
-
-        if not all(c in df.columns for c in PICARD_METRICS_COLS):
-            raise Exception(f"Metrics file {metrics_file} does not match expected columns: {', '.join(PICARD_METRICS_COLS)}")
-        elif df.empty:
-            raise Exception(f"Metrics file {metrics_file} does not contain expected TSV data.")
-
-        # insert sample id as first column and append to metrics dataframe
-        df.insert(0, 'SampleId', identifier)
-        metrics_df = metrics_df.append(df[PICARD_METRICS_COLS + ['SampleId']], ignore_index=True)
-
-
-    # Calculate additional metrics from sequence and add to metrics dataframe
-    for record in sequences:
-        identifier = str(record.id.split('|')[0]).lower()
-        metrics = sequence_metrics(record.seq, record.id)
-
-        # update corresponding row with additional metrics
-        for k,v in metrics.items():
-            metrics_df.loc[metrics_df['SampleId'].str.lower() == identifier, k] = str(v)
-
-    metrics_df.to_csv(OUTPUT_PATHS['metrics'], sep='\t', index=False)
-    LOG.debug(f"Combined metrics file saved to: {OUTPUT_PATHS['metrics']}")
+        LOG.debug(f"Combined metrics file saved to: {OUTPUT_PATHS['metrics']}")
 
 
     if yes_no_cancel("Process with NextClade?"):
         LOG.debug("Pulling data from NextClade")
 
-        process_with_nextclade(OUTPUT_PATHS['nextclade-sars-cov-2'],
+        process_with_nextclade(OUTPUT_PATHS['nextclade-data'],
                             OUTPUT_PATHS['nextclade'],
-                            OUTPUT_PATHS['fasta'])
+                            OUTPUT_PATHS['fasta'],
+                            args.pathogen,
+                            args.subtype or None)
 
         LOG.debug("NextClade processing complete")
 
@@ -163,43 +141,37 @@ if __name__ == '__main__':
         raise FileNotFoundError(f"{OUTPUT_PATHS['nextclade']}")
 
 
-    identifiers = [seqname.split('|')[0] for seqname in nextclade_df['seqName']]
-    non_control_identifiers = [x for x in identifiers if not str(x).lower().endswith('-pos-con')]
+    # create CSV of SFS sample barcodes
+    identifiers = read_all_identifiers(OUTPUT_PATHS['metadata'])
+    id3c_identifiers = find_sfs_identifiers(identifiers, '^((?!cascadia).)*$')
+    lims_identifiers = find_sfs_identifiers(identifiers, '^(cascadia)$')
 
-    missing_date = pd.DataFrame()
+    sfs_missing_date = pd.DataFrame()
 
-    if yes_no_cancel("Pull metadata from LIMS?"):
-        LOG.debug("Pulling metadata from LIMS")
-        OUTPUT_PATHS['lims-metadata'] = Path(output_batch_dir, 'lims-metadata-with-county.csv')
+    LOG.debug(f"LIMS identifiers: {lims_identifiers}")
 
-        lims_metadata = get_lims_sequencing_metadata(non_control_identifiers)
+    if lims_identifiers is not None and not lims_identifiers.empty:
+        lims_identifiers.to_csv(OUTPUT_PATHS['lims-sample-barcodes'], index=False)
+        LOG.debug(f"Saved {len(lims_identifiers)} SFS identifiers to {OUTPUT_PATHS['lims-sample-barcodes']}.")
 
-        # For Cascadia, use sfs_identifier_for_doh_reporting value as sfs_sample_identifier
-        lims_metadata.loc[lims_metadata['source'].str.lower() == 'cascadia','sfs_sample_identifier'] = lims_metadata['sfs_identifier_for_doh_reporting']
+        if yes_no_cancel("Pull metadata from LIMS?"):
+            LOG.debug("Pulling metadata from LIMS")
+            OUTPUT_PATHS['lims-metadata'] = Path(output_batch_dir, 'lims-metadata-with-county.csv')
 
-        # Only retros should be captured by this filter. Barcodes are then used to pull metadata from ID3C
-        metadata_from_id3c = lims_metadata[lims_metadata['source'].str.lower().isin(['sch', 'sfs'])][['sfs_sample_barcode']]
+            lims_metadata = add_lims_metadata(lims_identifiers)
+            lims_metadata.to_csv(OUTPUT_PATHS['lims-metadata'], index=False)
+            LOG.debug(f"Successfully saved LIMS metadata to {OUTPUT_PATHS['lims-metadata']}")
 
-        # Only non-retros should be captured by this filter. LIMS metadata saved to CSV
-        lims_metadata = lims_metadata[~lims_metadata['source'].str.lower().isin(['sch', 'sfs'])]
-        lims_metadata.to_csv(OUTPUT_PATHS['lims-metadata'], index=False)
+            sfs_missing_date = lims_metadata[(lims_metadata['source'].str.lower()=='sfs')&(lims_metadata['collection_date'].isna())]
 
-        # These additional fields are required by the `export_id3c_metadata` script
-        metadata_from_id3c['nwgc_id'] = ""
-        metadata_from_id3c['sample_origin'] = ""
-        metadata_from_id3c[['nwgc_id', 'sfs_sample_barcode', 'sample_origin']].to_csv(OUTPUT_PATHS['sfs-retro-sample-barcodes'], index=False)
-    else:
-        lims_metadata = pd.read_csv(OUTPUT_PATHS['lims-metadata'])
-        metadata_from_id3c = pd.read_csv(OUTPUT_PATHS['sfs-retro-sample-barcodes'])
+    LOG.debug(f"ID3C identifiers: {id3c_identifiers}")
 
-    missing_date = lims_metadata[lims_metadata['collection_date'].isna()]
-
-    # Check records that need metadata from ID3C (i.e. retros)
-    if (len(metadata_from_id3c) > 0):
-        OUTPUT_PATHS['id3c-metadata'] = Path(output_batch_dir, 'id3c-metadata-with-county.csv')
+    if id3c_identifiers is not None and not id3c_identifiers.empty:
+        id3c_identifiers.to_csv(OUTPUT_PATHS['id3c-sample-barcodes'], index=False)
 
         if yes_no_cancel("Pull metadata from ID3C?"):
             LOG.debug("Pulling metadata from ID3C")
+            OUTPUT_PATHS['id3c-metadata'] = Path(output_batch_dir, 'id3c-metadata-with-county.csv')
 
             # The `export_id3c_metadata` bash script is in the same location as current script
             export_id3c_metadata_script = Path(Path(__file__).resolve().parent, "export_id3c_metadata")
@@ -209,7 +181,7 @@ if __name__ == '__main__':
             with open(OUTPUT_PATHS['id3c-metadata'], 'w') as sys.stdout:
                 result = Conda.run_command('run', f"{export_id3c_metadata_script}",
                     "--ignore-origin",
-                    f"{OUTPUT_PATHS['sfs-retro-sample-barcodes']}",
+                    f"{OUTPUT_PATHS['id3c-sample-barcodes']}",
                     stdout="STDOUT",
                     stderr="STDERR"
                 )
@@ -220,33 +192,56 @@ if __name__ == '__main__':
             else:
                 raise Exception(f"Error pulling metadata from ID3C.\n {result}")
 
-        # Check for SFS samples with missing collection date
-        id3c_metadata_df = pd.read_csv(OUTPUT_PATHS['id3c-metadata'])
-        missing_date.append(id3c_metadata_df[id3c_metadata_df['collection_date'].isna()], ignore_index=True)
+            # Check for SFS samples with missing collection date
+            id3c_metadata_df = pd.read_csv(OUTPUT_PATHS['id3c-metadata'])
+            sfs_missing_date.append(id3c_metadata_df[(id3c_metadata_df['source']=='SFS')&(id3c_metadata_df['collection_date'].isna())], ignore_index=True)
 
 
-    if not missing_date.empty:
-        LOG.debug(f"Warning: {len(missing_date)} samples missing collection date:\n {missing_date}")
-        while True:
-            user_input = input(f"Continue preparing files? [y]es/[n]o: ").lower()
-            if user_input not in ['y','n']:
-                print("Not a valid response")
-                continue
-            elif user_input == 'n':
-                sys.exit()
-            else:
-                break
+        if not sfs_missing_date.empty:
+            LOG.debug(f"Warning: {len(sfs_missing_date)} SFS samples missing collection date:\n {sfs_missing_date}")
+            while True:
+                user_input = input(f"Continue preparing files? [y]es/[n]o: ").lower()
+                if user_input not in ['y','n']:
+                    print("Not a valid response")
+                    continue
+                elif user_input == 'n':
+                    sys.exit()
+                else:
+                    break
+
 
     if yes_no_cancel("Pull latest previous submissions file from Github?"):
-        LOG.debug("Pulling previous submissions")
-
-        pull_previous_submissions(OUTPUT_PATHS['previous-submissions'])
+        pull_previous_submissions(OUTPUT_PATHS['previous-submissions'], OUTPUT_PATHS['previous-submissions-other'], args.pathogen)
         LOG.debug("Finished pulling previous submissions")
 
-    # calculate excluded VOCs
-    calculate_excluded_vocs(nextclade_df, OUTPUT_PATHS['excluded-vocs'], identifier_format='sfs_sample_barcode')
+    if args.pathogen == 'sars-cov-2':
+        calculate_excluded_vocs(nextclade_df, OUTPUT_PATHS['excluded-vocs'], identifier_format='sfs_sample_barcode')
 
-    process_with_vadr(OUTPUT_PATHS['fasta'], output_batch_dir, interactive=True)
+    if not args.pathogen.startswith('flu'): # don't trim or run vadr for flu
+        if yes_no_cancel("Trim with GenBank script?"):
+            # The genbank trim script has a limit of 50 characters on identifiers; save a fasta file with just NWGC ids
+            #fasta_out = SeqIO.FastaIO.FastaWriter(OUTPUT_PATHS['fasta-short-ids'], wrap=None)
+            #fasta_out.write_file(sequences)
+
+            # Trim with GenBank's trimming script
+            result = Conda.run_command('run',
+                f'{os.path.realpath(os.path.dirname(__file__))}/fastaedit_public',
+                "-in", f"{OUTPUT_PATHS['fasta-short-ids']}",
+                "-trim_ambig_bases",
+                "-out_seq_file", f"{OUTPUT_PATHS['genbank-trimmed-fasta']}",
+                "-out", f"{OUTPUT_PATHS['genbank-trim-log']}"
+            )
+
+            # Replace the shortened IDs with the original long IDs. GenBank's trim script adds a `lcl|` prefix to each ID
+            # which must be removed.
+            trimmed_records = list(SeqIO.parse(OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta'))
+            for r in trimmed_records:
+                r.id = r.description = original_record_ids[r.id.lstrip('lcl|')]
+            SeqIO.write(trimmed_records, OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta-2line')
+
+            process_with_vadr(OUTPUT_PATHS['genbank-trimmed-fasta'], output_batch_dir, args.pathogen, interactive=True)
+        else:
+            process_with_vadr(OUTPUT_PATHS['fasta'], output_batch_dir, args.pathogen, interactive=True)
 
     print("Completed file prep.\n\n")
 
@@ -255,9 +250,19 @@ if __name__ == '__main__':
     next_avail_strain_id = valid_gisaid_ids['strain_name'].apply( lambda x: x[x.find("-S")+2 : x.find("/",x.find("-S"))]).astype(int).max() + 1
 
     if all([x.exists() for x in OUTPUT_PATHS.values()]):
-        # create_submissions script is in the same folder as current script
-        create_submissions_script = Path(Path(__file__).resolve().parent, "create_submissions.py")
+        # create_submissions scripts are in the same folder as current script
+        if args.pathogen == 'sars-cov-2':
+            create_submissions_script = Path(Path(__file__).resolve().parent, "create_submissions_sars_cov_2.py")
+        elif args.pathogen.startswith('rsv-'):
+            create_submissions_script = Path(Path(__file__).resolve().parent, "create_submissions_rsv.py")
+        elif args.pathogen.startswith('flu-'):
+            create_submissions_script = Path(Path(__file__).resolve().parent, "create_submissions_flu.py")
 
+
+        excluded_vocs_arg = f"--excluded-vocs {OUTPUT_PATHS.get('excluded-vocs')} \\\n" if (OUTPUT_PATHS.get('excluded-vocs')) else ""
+        vadr_dir_arg = f"--vadr-dir {OUTPUT_PATHS.get('vadr-dir')} \\\n" if (OUTPUT_PATHS.get('vadr-dir')) else ""
+        prev_submissions_other_arg = f"--previous-submissions-rsv-flu {OUTPUT_PATHS.get('previous-submissions-other')} \\\n" if args.pathogen=='sars-cov-2' else f"--previous-submissions-sars-cov-2 {OUTPUT_PATHS.get('previous-submissions-other')} \\\n"
+        subtype_arg = f"--subtype {args.pathogen.split('-')[-1]} \\\n" if (args.pathogen.startswith('rsv-') or args.pathogen.startswith('flu-')) else ""
         print("Review outputs, then run this command to create submissions:\n\n"
             f"python3 {create_submissions_script} \\\n"
             f"--batch-name {args.batch_date} \\\n"
@@ -266,12 +271,15 @@ if __name__ == '__main__':
             f"--fasta {OUTPUT_PATHS['fasta']} \\\n"
             f"--nextclade {OUTPUT_PATHS['nextclade']} \\\n"
             f"--previous-submissions {OUTPUT_PATHS['previous-submissions']} \\\n"
-            f"--excluded-vocs {OUTPUT_PATHS['excluded-vocs']} \\\n"
-            f"--vadr-dir {OUTPUT_PATHS['vadr-dir']} \\\n"
-            f"--output-dir {output_batch_dir} \\\n"
-            f"--strain-id {next_avail_strain_id} \\\n"
+            f"{prev_submissions_other_arg}"
+            f"--output-dir {Path(output_batch_dir, 'submissions', args.pathogen)} \\\n"
+            f"--strain-id {'<not found>' if pd.isna(next_avail_strain_id) else next_avail_strain_id} \\\n"
             f"--metrics {OUTPUT_PATHS['metrics']} \\\n"
             f"--test-name MIPsSEQ \\\n"
+            f"--metadata {OUTPUT_PATHS['metadata']} \\\n"
+            f"{excluded_vocs_arg}"
+            f"{vadr_dir_arg}"
+            f"{subtype_arg}"
             f"--gisaid-username <your username> \n"
         )
     else:

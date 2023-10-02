@@ -5,10 +5,11 @@ sequence identifiers.
 import argparse
 import pandas as pd
 from typing import List
-from create_submissions import IDENTIFIER_COLUMNS
+from create_submissions_sars_cov_2 import IDENTIFIER_COLUMNS
+from create_submissions_rsv import IDENTIFIER_COLUMNS as RSV_IDENTIFIER_COLUMNS
 
 
-def parse_identifiers(filename: str) -> pd.DataFrame:
+def parse_identifiers(filename: str, pathogen: str) -> pd.DataFrame:
     """
     Parse the identifiers from the provided *filename*.
     File is expected to be a TSV with all IDENTIFIER_COLUMNS.
@@ -16,7 +17,7 @@ def parse_identifiers(filename: str) -> pd.DataFrame:
     Creates a new `seq_id` column for easy matching with GenBank Sequence IDs
     """
     identifiers = pd.read_csv(filename, sep='\t', dtype='string',
-                              keep_default_na=False, usecols=IDENTIFIER_COLUMNS)
+                                keep_default_na=False, usecols=RSV_IDENTIFIER_COLUMNS if pathogen.startswith('rsv-') else IDENTIFIER_COLUMNS )
     # Pull out the seq id from the strain name USA/<seq_id>/<year>
     identifiers['seq_id'] = identifiers['strain_name'].apply(
         lambda x: x.split('/')[1] if not x == 'N/A' else x)
@@ -109,10 +110,12 @@ if __name__ == '__main__':
         help = "File path to GenBank accessions TSV. Can list multiple files.")
     parser.add_argument("--output", type=str, required=True,
         help = "File path for final output TSV.")
-
+    parser.add_argument("--pathogen", type=str, required=False,
+        choices=['sars-cov-2', 'rsv-a', 'rsv-b', 'flu-a', 'flu-b'],
+        default='sars-cov-2')
     args = parser.parse_args()
 
-    identifiers = parse_identifiers(args.identifiers)
+    identifiers = parse_identifiers(args.identifiers, pathogen=args.pathogen)
 
     if args.gisaid_accessions:
         gisaid = parse_gisaid(args.gisaid_accessions)
@@ -123,4 +126,14 @@ if __name__ == '__main__':
         genbank = parse_genbank(args.genbank_accessions)
         identifiers = merge_accessions(identifiers, genbank, 'genbank_accession')
 
-    identifiers[IDENTIFIER_COLUMNS].fillna('N/A').to_csv(args.output, sep='\t', index=False)
+    # For consistency, adding ' (Omicron)' to clade name to match previous format from NextClade
+    if args.pathogen == 'sars-cov-2':
+        identifiers.loc[identifiers.clade > '21J', 'clade'] = identifiers.clade + ' (Omicron)'
+        identifiers.loc[identifiers.clade.isin(['21A', '21I', '21J']), 'clade'] = identifiers.clade + ' (Delta)'
+        identifiers.loc[identifiers.clade == '20J', 'clade'] = '20J (Gamma, V3)'
+        identifiers.loc[identifiers.clade == '20H', 'clade'] = '20H (Beta, V2)'
+        identifiers.loc[identifiers.clade == '20I', 'clade'] = '20I (Alpha, V1)'
+
+        identifiers[IDENTIFIER_COLUMNS].fillna('N/A').to_csv(args.output, sep='\t', index=False)
+    elif args.pathogen.startswith('rsv-'):
+        identifiers[RSV_IDENTIFIER_COLUMNS].fillna('N/A').to_csv(args.output, sep='\t', index=False)

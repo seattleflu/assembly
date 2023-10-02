@@ -1,7 +1,9 @@
-# Seattle Flu Assembly Pipeline
+# Brotman Baty Institute Viral MIP Assembly Pipeline
 
 ## Introduction
-Assembly pipeline used in the [Seattle Flu Study](https://seattleflu.org/) to build consensus genomes for sequenced samples.
+Assembly pipeline used by the Brotman Baty Institute to build consensus genomes for sequenced samples.
+
+This pipeline was originally written for assembly of [Seattle Flu Study](https://seattleflu.org/) flu genomes, but has been modified to support assembly of SARS-CoV-2, RSV, and flu genomes sequenced with MIPs technology (CRIseq).
 
 Adapted from Louise Moncla's [Illumina pipline](https://github.com/lmoncla/illumina_pipeline) for influenza snp calling.
 
@@ -10,137 +12,65 @@ Install dependencies via Conda by running:
 ```
 conda env create -f envs/seattle-flu-environment.yaml
 ```
-Once installed, the environment needs to be activated to use assembly by running:
+Once installed, the environment needs to be activated by running:
 ```
 conda activate seattle-flu
 ```
 
 ## Set Up
 ### FASTQ Files
-The pipeline expects 8 total FASTQ files for each individual sample, with Read 1 (R1) and Read 2 (R2) from 4 different lanes.
+The pipeline expects 2 or more FASTQ files for each individual sample, with Read 1 (R1) and Read 2 (R2) from 1 or more lanes.
+Merging across lanes will be performed automatically.
+
+FASTQs should already be trimmed of their 5’ MIP targeting arms, which can be performed during demultiplexing with bcl2fastq.
 
 Expected filename format: `318375_S12_L001_R1_001.fastq.gz` where `318375` is the NWGC sample ID.
 
-If the filename does not contain the NWGC sample ID, rename the FASTQ files by using:
-```
-python scripts/rename_fastq.py
-usage: rename_fastq.py [-h]
-                       [Sample-ID-Map] [Barcode-column] [ID-column]
-                       [FASTQ-directory]
-
-Rename fastq files to contain NWGC sample ID
-
-positional arguments:
-  Sample-ID-Map    File path to csv file that matches random barcode to NWGC
-                   ID (default: None)
-  Barcode-column   Column name of column containing random barcodes (default:
-                   None)
-  ID-column        Column name of column containing NWGC sample IDs (default:
-                   None)
-  FASTQ-directory  File path to directory of FASTQ files that need to be
-                   renamed (default: None)
-
-optional arguments:
-  -h, --help       show this help message and exit
-```
-### Setup Config File
-By default, the pipeline will generate combinations of all samples and references and try to create consensus genomes for all combinations.
-
-Avoid this by specifying specific sample-reference pairs and ignored samples in the config file by using:
-```
-python scripts/setup_config_file.py
-usage: setup_config_file.py [-h] [--sample [Sample column]]
-                            [--target [Target column]]
-                            [--max_difference [Max percent difference]]
-                            [FASTQ directory] [Config file]
-                            [Sample/target map]
-
-Edits the Snakemake config file by adding sample reference pairs and ignored
-samples.
-
-positional arguments:
-  FASTQ directory       File path to directory containing fastq files
-                        (default: None)
-  Config file           File path to config file to be used with Snakemake
-                        (default: None)
-  Sample/target map     File path to Excel file containing samples and present
-                        targets (default: None)
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --sample [Sample column]
-                        Column name of column containg NWGC sample IDs
-                        (default: sample)
-  --target [Target column]
-                        Column name of column containing target identifiers
-                        (default: target)
-  --max_difference [Max percent difference]
-                        The maximum difference acceptable between R1 and R2
-                        reads (default: 20)
-```
-__Note__: This currently only works for flu-positive samples. To add more targets/references, edit `references/target_reference_map.json`.
-
-#### Check Read Pairs
-Embedded in this script is a check to ensure that the reads in R1 and R2 of each sample match. This is to avoid the demultiplexing error described in [this paper](https://www.nature.com/articles/s41588-019-0349-3). If the reads differ by over 20% then the sample will be added to the ignored samples. Redirect the output to a file to keep track of read differences and ignored samples.
-
-### NWGC ID/SFS UUID key-value pair
-Consensus genome FASTA headers are generated with the NWGC sample ID which then needs to be converted to the SFS UUID in order to be paired with stored metadata.
-
-This is done with the [seqkit replace](https://bioinf.shenwei.me/seqkit/usage/#replace) method, which requires a tab-delimited key-value file for replacing the key with the value. The key-value file can be generated using the following:
-```
-python scripts/id_barcode_key_value.py
-usage: id_barcode_key_value.py [-h]
-                               [NWGC-SFS-Match] [NWGC-column] [SFS-column]
-                               [Output]
-
-Create key/value pairs of NWGC ID and SFS ID
-
-positional arguments:
-  NWGC-SFS-Match  File path to Excel file that matches NWGC ID to SFS ID
-                  (default: None)
-  NWGC-column     Column name of column containing NWGC sample IDs (default:
-                  None)
-  SFS-column      Column name of column containing SFS UUIDs (default: None)
-  Output          File path for output key/value file (default: None)
-
-optional arguments:
-  -h, --help      show this help message and exit
-```
-__Note__: Remember to add the path of the output file to the config file after running this script.
 
 ## Configuration
-Currently, `config/config-flu-only.json` has the most updated version of the configuration needed to run assembly.
+Currently, `config/config.criseq.json` has the most updated version of the configuration needed to run assembly.
 
-* `fastq_directory`: the path to the directory containing the fastq files
-* `ignored_samples`: an object containing keys that specify samples to be ignored
-* `sample_reference_pairs`: an object containing specific sample/reference pairs, with the keys refering to the samples and an array of references as the values.
-* `barcode_match`: the path to the file containing tab-delimited key-value pairs used to replace NWGC sample IDs with SFS UUIDs
-* `min_align_rate`: the minimum overall align rate needed to generate a consensus genome (currently arbitrarily set to `1.00` so that `vcf_to_consensus` does not error out)
+Recommended file structure:  
+Create a work directory, which contains a subdirectory with input fastq files.
+The output directory can be specified in the config file and will be created as another subdirectory in the work directory.
+
+Edit the following parameters in the config file:
+
+* `work_dir`: path to the work directory, which will contain both input and output subdirectories
+* `input_subdir`: relative path from the work directory to the subdirectory containing input fastqs,
+* `assembly_subdir`: relative path from the work directory to the output subdirectory (will be created by Snakemake if it does not already exist)
+* `ignored_samples`: an object containing keys that specify samples to be ignored (optional)
+* `sample_reference_pairs`: an object containing specific sample/reference pairs, with the keys refering to the samples and an array of references as the values. (optional; if left empty, the pipeline will attempt to create an assembly for every reference in `reference_viruses` for each sample)
 * `reference_virusus`: an object containing keys that specify references to be used
-* `params`: parameters for the various tools used in the pipeline (currently set by Louise's recommendations)
+* `params`: parameters for the various tools used in the pipeline
 
 ## Usage
-Running (this will be updated):
+The Snakemake pipeline generates one consensus FASTA for each assembly.
+To run the Snakemake pipeline:
 ```
-snakemake --configfile config/config-flu-only.json -k
-```
-OR (if on Rhino)
-```
-snakemake -w 60 --configfile config/config-flu-only.json --cluster-config config/cluster.json --cluster "sbatch --nodes=1 --tasks=1 --mem={cluster.memory} --cpus-per-task={cluster.cores} --tmp={cluster.disk} --time={cluster.time} -o all_output.out" -j 20 -k
+snakemake --configfile config/config.criseq.json -k --cores <number_of_cores> --rerun-incomplete --snakefile Snakefile-cri
 ```
 
-You can use `--use-conda` if there are rule-specific environment files.
+To combine all assemblies into one FASTA per pathogen and gather whole genome sequence metrics with Picard, run these 3 scripts manually after Snakemake.
+The first 2 steps should be run in the seattle-flu conda environment, and the last step should be run in base conda, with Picard installed locally.
+```
+# conda activate seattle-flu (if not already activated)
+bash scripts/fasta_to_single_line.sh
+bash scripts/sort_index_bams.sh
+conda deactivate
+bash scripts/picard.sh
+```
 
-## Basic Steps
+## Snakemake pipeline basic steps
 
 ### 1. Index reference genomes
 Using [bowtie2-build](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#the-bowtie2-build-indexer) to build a Bowtie index for each reference genome. These will later be used in the mapping step.
 
 ### 2. Merge lanes
-Concatenates 8 FASTQ files for each sample into 2 files (R1 and R2).
+Concatenates FASTQ files for each sample into 2 files (R1 and R2).
 
 ### 3. Trim fastqs
-Trim raw FASTQ files with [Trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic), which cuts out adapter/illumina-specific sequences, trims the reads based on quality scores, and removes short reads.
+Trim raw FASTQ files with [Trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic), which cuts out adapter/illumina-specific sequences, trims the reads based on quality scores, and removes short reads. Trim MIP 3’ overhangs with NGmerge.
 
 ### 4. Post trim fastqc
 Generates summary statistics using [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/). Allows for some quality control checks on raw sequence data coming from high throughput sequencing pipelines.
@@ -195,34 +125,10 @@ This does not account for coverage, so we pass it the BEDfile of low coverage si
 
 ### 16. FASTA headers
 Edits the FASTA headers to fit the pattern needed for downstream analysis.
-Example FASTA header: `>SFS-UUID|SFS-UUID-PB2|H1N1pdm|PB2`
+Example FASTA header: `>SampleID|SampleID-PB2|H1N1pdm|PB2`
 1. Replace reference sequence name with the NWGC sample ID using Perl to perform "lookaround" regex matches
-2. Uses [seqkit replace](https://bioinf.shenwei.me/seqkit/usage/#replace) to replace the NWGC sample ID with the SFS UUID.
-3.  Create the UUID-gene combination using AWK
 
 ### 17. Aggregate
-This is the last rule of the pipeline that prints out the final result of each sample/reference pair. If a consensus genome is generated, then this will also add it to the final combined FASTA.
+This is the last rule of the pipeline that prints out the final result of each sample/reference pair.
 
 The input of this rule differs based on the result of the checkpoint, so this rule dictates the final outcome of each sample/reference pair.
-
-### Clean
-Deletes all of the intermediate directories and files generated from running the pipeline. The only one that it does not delete is the `consensus_genome` directory.
-
-
-## Advanced Steps
-### Upload to id3c
-Consensus genomes can be uploaded to [id3c] with the correct id3c permissions stored as environment
-variables. Note: id3c uses basic authentication. More information can be found in the [id3c
-documentation].
-
-#### Send Slack alerts on failed uploads
-An assembly can utilize the ID3C Bot Slack application to send notifications when an id3c upload
-fails. The Slack webhook for the #id3c-alerts Slack channel should be stored as an environment
-variable. Slack webhook URLs are found at the [Slack Apps API site]. Make sure you're logged into
-the Seattle Flu Study workspace. If you cannot view the link above, contact another member of the
-id3c-team to add you as a collaborator to the ID3C Bot app.
-
-
-[id3c]: http://github.com/seattleflu/id3c
-[id3c documentation]: https://github.com/seattleflu/id3c/blob/master/README.md
-[Slack Apps API site]: https://api.slack.com/apps/ALR131CG0/incoming-webhooks?

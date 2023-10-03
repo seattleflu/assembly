@@ -318,7 +318,8 @@ def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str], failed_nwgc
     metadata['status'] = 'submitted'
 
     # Label samples being held for review (if the sample failed for other reasons, it will be marked with the other failure reason)
-    metadata.loc[metadata['nwgc_id'].isin(under_review_nwgc_ids), 'status'] = 'passed qc and under review'
+    if under_review_nwgc_ids is not None:
+        metadata.loc[metadata['nwgc_id'].isin(under_review_nwgc_ids), 'status'] = 'passed qc and under review'
 
     # Label samples missing collection date
     metadata.loc[metadata['collection_date'].isnull(), 'status'] = 'missing collection date'

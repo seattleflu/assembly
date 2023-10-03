@@ -259,7 +259,7 @@ def parse_assembly_metrics(metrics_file: str) -> pd.DataFrame:
 
     # Map of needed metrics columns to final column names
     metrics_column_map = {
-        'SampleId': 'segment_id',
+        'SampleId': 'nwgc_id',
         'MEAN_COVERAGE': 'coverage',
         'CONSENSUS_FASTA_LENGTH': 'length',
         'PCT_N_MAPPED': 'percent_ns',
@@ -269,9 +269,40 @@ def parse_assembly_metrics(metrics_file: str) -> pd.DataFrame:
                                    usecols=metric_column_names)
 
     metrics = assembly_metrics[metrics_column_map.keys()].rename(columns=metrics_column_map)
-    # get nwgc_id from segment_id
-    metrics['nwgc_id'] = metrics['segment_id'].apply(lambda x: x.split('|')[0])
+
     return metrics
+
+
+def parse_segment_metrics(segment_metrics_file: str) -> pd.DataFrame:
+    """
+    Parse segment metrics from *segment_metrics_file* and return a new dataframe containing metrics for each segment
+    """
+
+    segment_metric_column_names = [
+        'SegmentId',
+        'SampleId',
+        'SegmentName',
+        'CONTIG_NAME',
+        'COUNT_A',
+        'COUNT_C',
+        'COUNT_G',
+        'COUNT_T',
+        'COUNT_N',
+        'CONSENSUS_FASTA_LENGTH',
+        'PCT_N_MAPPED'
+    ]
+
+    segment_metrics_column_map = {
+        'SampleId': 'nwgc_id',
+        'CONSENSUS_FASTA_LENGTH': 'length',
+        'PCT_N_MAPPED': 'percent_ns',
+    }
+
+    segment_metrics = pd.read_csv(segment_metrics_file, sep='\t', dtype='string', usecols=segment_metric_column_names)
+
+    segment_metrics = segment_metrics.rename(columns=segment_metrics_column_map)
+
+    return segment_metrics
 
 
 def add_clade_info(metadata: pd.DataFrame, nextclade_file: str, metadata_id: str = 'nwgc_id', nextclade_id_delimiter: str = None) -> pd.DataFrame:
@@ -301,53 +332,50 @@ def add_clade_info(metadata: pd.DataFrame, nextclade_file: str, metadata_id: str
     return metadata.merge(nextclade[['nwgc_id', 'clade']], left_on=metadata_id, right_on='nwgc_id', how='left')
 
 
-def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str], failed_nwgc_ids: List[str]) -> pd.DataFrame:
+def add_segment_sequence_status(segment_metadata: pd.DataFrame) -> pd.DataFrame:
     """
-    Add a column "status" to the provided *metadata* that reflects the final
-    status of the each sequence. The provided *prev_subs* is a set of `lab_accession_id`
+    Add a column "segment_status" to the provided *metadata* that reflects the final
+    status of each segment sequence. The provided *prev_subs* is a set of `lab_accession_id`
     for samples that have been previously submitted.
 
-    Potential values for "status" in precedence order are:
+    Potential values for "segment_status" in precedence order are:
     - failed
     - >10% Ns
-    - control
-    - dropped duplicate
-    - missing collection date
-    - submitted
+    # - control
+    # - dropped duplicate
+    # - missing collection date
+    - passed
     """
-    # Default value is "submitted"
-    metadata['status'] = 'submitted'
+    # Default value is "passed"
+    segment_metadata['segment_status'] = 'passed'
 
-    # Label samples missing collection date
-    metadata.loc[metadata['collection_date'].isnull(), 'status'] = 'missing collection date'
+    # # Label samples missing collection date
+    # metadata.loc[metadata['collection_date'].isnull(), 'segment_status'] = 'missing collection date'
 
-    # Find duplicate segments within current metadata set
-    # Keep the segment with the lower percent Ns
-    # Since flu is segmented and each segment has its own entry in the metadata df,
-    # we need to consider both the lab accession id and the segment name
-    # the segment name (HA, NA, etc.) needs to be parsed from the segment id first
-    metadata['segment_name'] = metadata['segment_id'].apply(lambda x: x.split('|')[-1] if not pd.isnull(x) else x)
-    current_duplicate = metadata.sort_values('percent_ns', ascending=True).duplicated(subset=['lab_accession_id','segment_name'], keep='first')
+    # # Find duplicate segments within current metadata set
+    # # Keep the segment with the lower percent Ns
+    # # Since flu is segmented and each segment has its own entry in the metadata df,
+    # # we need to consider both the lab accession id and the segment name
+    # # the segment name (HA, NA, etc.) needs to be parsed from the segment id first
+    # metadata['segment_name'] = metadata['segment_id'].apply(lambda x: x.split('|')[-1] if not pd.isnull(x) else x)
+    # current_duplicate = metadata.sort_values('percent_ns', ascending=True).duplicated(subset=['lab_accession_id','segment_name'], keep='first')
     
-    # Find samples that have been previously submitted and mark as 'dropped duplicate'
-    # this will not allow us to process segments from samples where some but not all segments have been previously submitted, but we probably won't want to do that anyway?
-    overall_duplicate = metadata['lab_accession_id'].isin(prev_subs)
+    # # Find samples that have been previously submitted and mark as 'dropped duplicate'
+    # # this will not allow us to process segments from samples where some but not all segments have been previously submitted, but we probably won't want to do that anyway?
+    # overall_duplicate = metadata['lab_accession_id'].isin(prev_subs)
     
-    # Label duplicate samples as 'dropped duplicate'
-    metadata.loc[current_duplicate | overall_duplicate, 'status'] = 'dropped duplicate'
+    # # Label duplicate samples as 'dropped duplicate'
+    # metadata.loc[current_duplicate | overall_duplicate, 'segment_status'] = 'dropped duplicate'
 
-    # Label control samples
-    metadata.loc[metadata['project'].str.lower() == 'sentinel', 'status'] = 'control'
-
-    # Label samples that failed VADR
-    metadata.loc[metadata['nwgc_id'].isin(failed_nwgc_ids), 'status'] = 'failed VADR'
+    # # Label control samples - note that these only get labeled as control if they pass the qc checks below
+    # metadata.loc[metadata['project'].str.lower() == 'sentinel', 'segment_status'] = 'control'
 
     # Label samples with >10% Ns in the genome
-    metadata.loc[pd.to_numeric(metadata['percent_ns'], errors='coerce') > 10, 'status'] = '>10% Ns'
-    metadata.loc[pd.to_numeric(metadata['percent_ns'], errors='coerce') == 0, 'status'] = 'no Ns'
+    segment_metadata.loc[pd.to_numeric(segment_metadata['percent_ns'], errors='coerce') > 10, 'segment_status'] = '>10% Ns'
+    segment_metadata.loc[pd.to_numeric(segment_metadata['percent_ns'], errors='coerce') == 0, 'segment_status'] = 'no Ns'
 
     # Find samples without a genome, i.e. 'length' is null
-    no_genome = pd.isna(metadata['length'])
+    no_genome = pd.isna(segment_metadata['length'])
 
     # determine minimum length for flu.
     # Do we want to submit incomplete segments? Do we want to submit genomes that don't have
@@ -357,9 +385,55 @@ def add_sequence_status(metadata: pd.DataFrame, prev_subs: Set[str], failed_nwgc
 
     # Label samples that failed to generate genome
     # metadata.loc[no_genome | incomplete_genome, 'status'] = 'failed'
-    metadata.loc[no_genome, 'status'] = 'failed'
+    segment_metadata.loc[no_genome, 'segment_status'] = 'failed'
 
-    return metadata
+    return segment_metadata
+
+
+def add_sample_sequence_status(sample_metadata: pd.DataFrame, segment_metadata: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add a column "status" to the provided *sample_metadata* df that reflects the final status
+    of a sample.
+    Options for "status" column are:
+        - failed (means that some or all segments failed either qc or to generate a consensus)
+        - control
+        - dropped duplicate
+        - missing collection date
+        - submitted
+
+    TODO Add the following columns to the *sample_metadata* df:
+        - num_segments_pass_qc: the number of segments that passed qc (out of 8)
+        - num_segments_consensus: the number of segments that generated a consensus sequence, whether it passed or failed qc
+    """
+
+    # create series where index is nwgc_id and value is the number of segments that passed for that sample
+    num_segments_passed = segment_metadata.groupby('nwgc_id')['segment_status'].apply(lambda x: x[x == 'passed'].count())
+
+    # for each row in metadata, if all segments passed for that nwgc_id then 'sample_status' = 'submitted'
+    # otherwise, 'sample_status' = 'not_submitted'
+    #sample_metadata['status'] = sample_metadata['nwgc_id'].apply(lambda x: 'submitted' if num_segments_passed[x] == 8 else 'failed')
+    # this is fragile, assumes 8 segments
+    # this doesn't work if there's a sample that is in the metadata sheet but doesn't have a fastq, so have to do it in a less efficient way below:
+    for sampleid in sample_metadata['nwgc_id']:
+        if sampleid not in num_segments_passed:
+            print(f'Warning: Received metadata for sample {sampleid}, but no metrics. Skipping.')
+            sample_metadata.loc[sample_metadata['nwgc_id'] == sampleid, 'status'] = 'metadata_received_but_no_seq_data'
+        else:
+            sample_metadata.loc[sample_metadata['nwgc_id'] == sampleid, 'status'] = 'submitted' if num_segments_passed[sampleid] == 8 else 'failed'
+
+    # Find duplicate samples within current metadata set
+    # Keep the sample with the lower percent Ns
+    # this is copied from sars-cov-2 and rsv which are non-segmented; might make more sense to sort by number of segments passed and then percent ns for flu, but keeping this for now
+    current_duplicate = sample_metadata.sort_values('percent_ns', ascending=True).duplicated(subset='lab_accession_id', keep='first')
+    # Find samples that have been previously submitted and mark as 'dropped duplicate'
+    overall_duplicate = sample_metadata['lab_accession_id'].isin(prev_subs)
+    # Label duplicate samples as 'dropped duplicate'
+    sample_metadata.loc[current_duplicate | overall_duplicate, 'status'] = 'dropped duplicate'
+
+    # Label control samples
+    sample_metadata.loc[sample_metadata['project'].str.lower() == 'sentinel', 'status'] = 'control'    
+
+    return sample_metadata
 
 
 def assign_strain_identifier(metadata: pd.DataFrame, strain_id: int) -> pd.DataFrame:
@@ -651,6 +725,8 @@ if __name__ == '__main__':
         help = "File path to the LIMS metadata CSV file" )
     parser.add_argument("--metrics", type=str, required=True,
         help = "File path to the TSV of assembly metrics from NWGC")
+    parser.add_argument("--segment-metrics", type=str, required=False,
+        help = "File path to TSV file containing segment metrics. Required only if pathogen is flu")
     parser.add_argument("--nextclade", type=str, required=True,
         help = "File path to the NextClade TSV file")
     parser.add_argument("--previous-submissions", type=str, required=True,
@@ -661,8 +737,6 @@ if __name__ == '__main__':
         help = "The starting numerical strain ID for this batch of sequences")
     parser.add_argument("--fasta", type=str, required=True,
         help = "File path to the FASTA file")
-    parser.add_argument("--gisaid-username", type=str, required=True,
-        help = "Submitter's GISAID username")
     parser.add_argument("--output-dir", type=str, required=True,
         help = "Path to the output directory for all output files")
     parser.add_argument("--pathogen", type=str, required=True,
@@ -673,27 +747,41 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    # if pathogen is flu, check that segment metrics argument was provided
+    if args.pathogen.startswith("flu") and args.segment_metrics is None:
+        parser.error("--segment-metrics is required if --pathogen is set to flu-a or flu-b")
+
     # not running vadr for flu, so for now failed_nwgc_ids = []
     failed_nwgc_ids = []
 
+    # for flu, keep metadata in 2 tables:
+    # segment_metadata has metrics for each segment and a segment_status column
+    # sample_metadata has metadata for each sample and a sample_status column
+
     prev_subs = parse_previous_submissions(args.previous_submissions)
 
-    metadata = parse_metadata(args.metadata, args.id3c_metadata, args.lims_metadata)
-    metadata = standardize_metadata(metadata)
+    sample_metadata = parse_metadata(args.metadata, args.id3c_metadata, args.lims_metadata)
+    sample_metadata = standardize_metadata(sample_metadata)
 
-    metadata = add_assembly_metrics(metadata, args.metrics)
-    metadata = add_clade_info(metadata, args.nextclade, nextclade_id_delimiter='|')
+    sample_metadata = add_assembly_metrics(sample_metadata, args.metrics)
+    sample_metadata = add_clade_info(sample_metadata, args.nextclade, nextclade_id_delimiter='|')
 
-    metadata = add_sequence_status(metadata, prev_subs, failed_nwgc_ids)
-    metadata = assign_strain_identifier(metadata, args.strain_id)
+    segment_metadata = parse_segment_metrics(args.segment_metrics)
 
-    metadata.to_csv(Path(args.output_dir) / 'metadata.csv', index=False)
-    sys.exit()
+    # assign segment status
+    # check for nonzero segment length, nonzero %N, <10% N
+    segment_metadata = add_segment_sequence_status(segment_metadata)
+
+    # check that all segments passed, valid collection date, non-control, and filter out any duplicate sfs identifiers
+    sample_metadata = add_sample_sequence_status(sample_metadata, segment_metadata)
+
+    # this needs to be done after running FLAN because we don't want to assign a strain name to an assembly that we're not going to submit
+    sample_metadata = assign_strain_identifier(sample_metadata, args.strain_id)
 
     # Check for duplicated strain names
     previous_rsv_flu_strain_names = pd.read_csv(args.previous_submissions, sep='\t', usecols=['strain_name'])['strain_name'].dropna()
     previous_sars_cov_2_strain_names = pd.read_csv(args.previous_submissions_sars_cov_2, sep='\t', usecols=['strain_name'])['strain_name'].dropna()
-    current_strain_names = metadata[metadata['strain_name']!='N/A']['strain_name'].dropna()
+    current_strain_names = sample_metadata[sample_metadata['strain_name']!='N/A']['strain_name'].dropna()
     all_strain_names = previous_rsv_flu_strain_names.append(previous_sars_cov_2_strain_names, ignore_index=True).append(current_strain_names, ignore_index=True)
     duplicate_strain_names = all_strain_names[all_strain_names.duplicated()]
     assert duplicate_strain_names.empty, f"Error: Overlapping identifiers\n {duplicate_strain_names}"
@@ -705,20 +793,18 @@ if __name__ == '__main__':
     batch_name = args.batch_name
 
     # Create CSV with all metadata fields for easy debugging
-    metadata.to_csv(output_dir / f'{batch_name}_metadata.csv', index=False)
+    sample_metadata.to_csv(Path(args.output_dir) / 'metadata.csv', index=False)
+    segment_metadata.to_csv(Path(args.output_dir) / 'segment_metadata.csv', index=False)
 
-    create_identifiers_report(metadata, output_dir, batch_name, args.pathogen)
-    create_summary_reports(metadata, output_dir, batch_name)
-    create_sample_status_report(metadata, output_dir, batch_name)
+    create_identifiers_report(sample_metadata, output_dir, batch_name, args.pathogen)
+    create_summary_reports(sample_metadata, output_dir, batch_name)
+    create_sample_status_report(sample_metadata, output_dir, batch_name)
 
     # Only create submissions for sequences that have status "submitted"
-    submit_metadata = metadata.loc[metadata['status'] == 'submitted']
+    submit_metadata = sample_metadata.loc[sample_metadata['status'] == 'submitted']
 
     if submit_metadata.empty:
-        sys.exit(f"No new submissions:\n {metadata.groupby(['status'])['status'].count()}")
+        sys.exit(f"No new submissions:\n {sample_metadata.groupby(['status'])['status'].count()}")
 
-    # Only create NCBI submissions for sequences that passed VADR
-    ncbi_metadata = submit_metadata.loc[~submit_metadata['nwgc_id'].isin(failed_nwgc_ids)].copy(deep=True)
-
-    biosample_metadata = create_biosample_submission(ncbi_metadata, output_dir, batch_name, args.pathogen)
+    biosample_metadata = create_biosample_submission(submit_metadata, output_dir, batch_name, args.pathogen)
     biosample_metadata.to_csv(output_dir / f'biosample_metadata.csv', index=False)

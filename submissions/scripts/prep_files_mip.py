@@ -14,7 +14,7 @@ from datetime import datetime
 from export_lims_metadata import get_lims_sequencing_metadata, add_lims_metadata
 from extract_sfs_identifiers import read_all_identifiers, find_sfs_identifiers
 
-from aggregate_metrics import combine_metrics, append_metrics_counts
+from aggregate_metrics import combine_metrics, append_metrics_counts, append_metrics_counts_flu
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "debug").upper()
 
@@ -73,11 +73,7 @@ if __name__ == '__main__':
         'id3c-sample-barcodes': Path(output_batch_dir, 'id3c-sample-barcodes.csv'),
         'lims-sample-barcodes': Path(output_batch_dir, 'lims-sample-barcodes.csv'),
         'metadata': Path(output_batch_dir, 'external-metadata.xlsx'),
-
-        # pathogen-specific outputs
         'metrics': Path(output_batch_dir, f'{args.pathogen}-metrics.tsv'),
-        'nextclade': Path(output_batch_dir,f'nextclade-{args.pathogen}.tsv'),
-        'nextclade-data': Path(output_batch_dir, f'data/{args.pathogen}'),
         'vadr-dir': Path(output_batch_dir, f'genbank-{args.pathogen}'), #this one is a folder
         'fasta-short-ids': Path(output_batch_dir, f'{args.pathogen}-short-ids.fa') # for now, create this file for every pathogen; however, it is only needed if GenBank trimming is performed, which should only be done for RSV.
     }
@@ -96,6 +92,22 @@ if __name__ == '__main__':
             'fasta-short-ids': Path(output_batch_dir, f'{args.pathogen}-short-ids.fa'),
             'genbank-trimmed-fasta': Path(output_batch_dir, f'{args.pathogen}-genbank-trimmed.fa'),
             'genbank-trim-log': Path(output_batch_dir, f'{args.pathogen}-genbank-trim.xml'),
+        })
+    
+    # for flu, perform nextclade for both HA and NA segments
+    if args.pathogen.startswith('flu'):
+        OUTPUT_PATHS.update({
+            'nextclade-ha': Path(output_batch_dir,f'nextclade-{args.pathogen}-ha.tsv'),
+            'nextclade-data-ha': Path(output_batch_dir, f'data/{args.pathogen}-ha'),
+            'nextclade-na': Path(output_batch_dir,f'nextclade-{args.pathogen}-na.tsv'),
+            'nextclade-data-na': Path(output_batch_dir, f'data/{args.pathogen}-na'),
+            # flu has segment metrics in addition to sample metrics
+            'segment-metrics': Path(output_batch_dir, f'{args.pathogen}-segment-metrics.tsv')
+        })
+    else: # for nonsegmented pathogens, only need to perform nextclade once, on whole genome
+        OUTPUT_PATHS.update({
+            'nextclade': Path(output_batch_dir,f'nextclade-{args.pathogen}.tsv'),
+            'nextclade-data': Path(output_batch_dir, f'data/{args.pathogen}')
         })
 
     # for some reason this value is sometimes a tuple where the second value is blank
@@ -117,8 +129,11 @@ if __name__ == '__main__':
 
     if yes_no_cancel("Combine metrics files?"):
         LOG.debug("Combining metrics files")
-
-        metrics_df, original_record_ids = append_metrics_counts(combine_metrics(args.metrics, args.pathogen), args.fasta, OUTPUT_PATHS['fasta-short-ids'], args.pathogen)
+        if args.pathogen.startswith("flu"): # create both metrics_df and segment_metrics_df for flu
+            metrics_df, original_record_ids, segment_metrics_df = append_metrics_counts_flu(combine_metrics(args.metrics), args.fasta, OUTPUT_PATHS['fasta-short-ids'])
+            segment_metrics_df.to_csv(OUTPUT_PATHS['segment-metrics'], sep='\t', index=False)        
+        else:
+            metrics_df, original_record_ids = append_metrics_counts(combine_metrics(args.metrics), args.fasta, OUTPUT_PATHS['fasta-short-ids'])
         metrics_df.to_csv(OUTPUT_PATHS['metrics'], sep='\t', index=False)
 
         LOG.debug(f"Combined metrics file saved to: {OUTPUT_PATHS['metrics']}")
@@ -126,19 +141,36 @@ if __name__ == '__main__':
 
     if yes_no_cancel("Process with NextClade?"):
         LOG.debug("Pulling data from NextClade")
-
-        process_with_nextclade(OUTPUT_PATHS['nextclade-data'],
-                            OUTPUT_PATHS['nextclade'],
-                            OUTPUT_PATHS['fasta'],
-                            args.pathogen,
-                            args.subtype or None)
+        if args.pathogen.startswith('flu'):
+            # for flu, run nextclade for both HA and NA segments
+            process_with_nextclade(OUTPUT_PATHS['nextclade-data-ha'],
+                                OUTPUT_PATHS['nextclade-ha'],
+                                OUTPUT_PATHS['fasta'],
+                                args.pathogen,
+                                args.subtype or None,
+                                'ha')
+            process_with_nextclade(OUTPUT_PATHS['nextclade-data-na'],
+                                OUTPUT_PATHS['nextclade-na'],
+                                OUTPUT_PATHS['fasta'],
+                                args.pathogen,
+                                args.subtype or None,
+                                'na')  
+        else:
+            # for other pathogens, which are not segmented, run nextclade once on the whole genome
+            process_with_nextclade(OUTPUT_PATHS['nextclade-data'],
+                                OUTPUT_PATHS['nextclade'],
+                                OUTPUT_PATHS['fasta'],
+                                args.pathogen,
+                                args.subtype or None)                   
 
         LOG.debug("NextClade processing complete")
 
-    if os.path.isfile(OUTPUT_PATHS['nextclade']):
-        nextclade_df = pd.read_csv(OUTPUT_PATHS['nextclade'], sep='\t')
-    else:
-        raise FileNotFoundError(f"{OUTPUT_PATHS['nextclade']}")
+    # for sars-cov-2, create nextclade_df which will be used to create excluded_vocs file
+    if args.pathogen == 'sars-cov-2':
+        if os.path.isfile(OUTPUT_PATHS['nextclade']):
+            nextclade_df = pd.read_csv(OUTPUT_PATHS['nextclade'], sep='\t')
+        else:
+            raise FileNotFoundError(f"{OUTPUT_PATHS['nextclade']}")
 
 
     # create CSV of SFS sample barcodes
@@ -217,30 +249,32 @@ if __name__ == '__main__':
     if args.pathogen == 'sars-cov-2':
         calculate_excluded_vocs(nextclade_df, OUTPUT_PATHS['excluded-vocs'], identifier_format='sfs_sample_barcode')
 
-    if not args.pathogen.startswith('flu'): # don't trim or run vadr for flu
-        if yes_no_cancel("Trim with GenBank script?"):
-            # The genbank trim script has a limit of 50 characters on identifiers; save a fasta file with just NWGC ids
-            #fasta_out = SeqIO.FastaIO.FastaWriter(OUTPUT_PATHS['fasta-short-ids'], wrap=None)
-            #fasta_out.write_file(sequences)
+    #if not args.pathogen.startswith('flu'): # don't trim or run vadr for flu
+    if yes_no_cancel("Trim with GenBank script?"):
+        # The genbank trim script has a limit of 50 characters on identifiers; save a fasta file with just NWGC ids
+        #fasta_out = SeqIO.FastaIO.FastaWriter(OUTPUT_PATHS['fasta-short-ids'], wrap=None)
+        #fasta_out.write_file(sequences)
 
-            # Trim with GenBank's trimming script
-            result = Conda.run_command('run',
-                f'{os.path.realpath(os.path.dirname(__file__))}/fastaedit_public',
-                "-in", f"{OUTPUT_PATHS['fasta-short-ids']}",
-                "-trim_ambig_bases",
-                "-out_seq_file", f"{OUTPUT_PATHS['genbank-trimmed-fasta']}",
-                "-out", f"{OUTPUT_PATHS['genbank-trim-log']}"
-            )
+        # Trim with GenBank's trimming script
+        result = Conda.run_command('run',
+            f'{os.path.realpath(os.path.dirname(__file__))}/fastaedit_public',
+            "-in", f"{OUTPUT_PATHS['fasta-short-ids']}",
+            "-trim_ambig_bases",
+            "-out_seq_file", f"{OUTPUT_PATHS['genbank-trimmed-fasta']}",
+            "-out", f"{OUTPUT_PATHS['genbank-trim-log']}"
+        )
 
-            # Replace the shortened IDs with the original long IDs. GenBank's trim script adds a `lcl|` prefix to each ID
-            # which must be removed.
-            trimmed_records = list(SeqIO.parse(OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta'))
-            for r in trimmed_records:
-                r.id = r.description = original_record_ids[r.id.lstrip('lcl|')]
-            SeqIO.write(trimmed_records, OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta-2line')
+        # Replace the shortened IDs with the original long IDs. GenBank's trim script adds a `lcl|` prefix to each ID
+        # which must be removed.
+        trimmed_records = list(SeqIO.parse(OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta'))
+        for r in trimmed_records:
+            r.id = r.description = original_record_ids[r.id.lstrip('lcl|')]
+        SeqIO.write(trimmed_records, OUTPUT_PATHS['genbank-trimmed-fasta'], 'fasta-2line')
 
+        if yes_no_cancel("Process with VADR?"):
             process_with_vadr(OUTPUT_PATHS['genbank-trimmed-fasta'], output_batch_dir, args.pathogen, interactive=True)
-        else:
+    else:
+        if yes_no_cancel("Process with VADR?"):
             process_with_vadr(OUTPUT_PATHS['fasta'], output_batch_dir, args.pathogen, interactive=True)
 
     print("Completed file prep.\n\n")

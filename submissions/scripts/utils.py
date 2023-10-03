@@ -37,7 +37,7 @@ def yes_no_cancel(message: str) -> bool:
         sys.exit()
 
 
-def process_with_nextclade(nextclade_dataset_dir:Path, output_tsv:Path, input_fasta:Path, pathogen:str, subtype:str=None):
+def process_with_nextclade(nextclade_dataset_dir:Path, output_tsv:Path, input_fasta:Path, pathogen:str, subtype:str=None, segment:str=None):
     # nextclade uses dashes in `sars-cov-2` name but underscore for RSV
     if pathogen.startswith('rsv'):
         dataset = pathogen.replace('-', '_')
@@ -45,21 +45,26 @@ def process_with_nextclade(nextclade_dataset_dir:Path, output_tsv:Path, input_fa
         assert subtype in ['h1n1', 'h3n2'], f"Error: unknown influenza subtype {subtype}"
         if subtype == 'h1n1':
             subtype += 'pdm'
-        dataset = ('flu_' + subtype + '_ha')
-        ha_fasta_output = Path(input_fasta.parents[0], input_fasta.stem + '.fasta')
-        with open(ha_fasta_output, 'w') as ha_fasta:
+        segment = segment.lower()
+        assert segment in ['ha','na'], f"Error: invalid segment {segment}"
+        dataset = ('flu_' + subtype + '_' + segment)
+        segment_fasta_output = Path(input_fasta.parents[0], input_fasta.stem + '.' + segment + '.fasta')
+        with open(segment_fasta_output, 'w') as segment_fasta:
             for record in SeqIO.parse(input_fasta, 'fasta'):
-                if record.id.split('|').pop() == 'HA':
-                    SeqIO.write(record, ha_fasta, 'fasta-2line')
-        input_fasta = ha_fasta_output
+                if record.id.split('|').pop() == segment.upper():
+                    SeqIO.write(record, segment_fasta, 'fasta-2line')
+        input_fasta = segment_fasta_output
     elif pathogen.startswith('flu-b'):
-        dataset = 'flu_vic_ha'
-        ha_fasta_output = Path(input_fasta.parents[0], input_fasta.stem + '.fasta')
-        with open(ha_fasta_output, 'w') as ha_fasta:
+        # TODO: DRY up this portion of the code between flu-a and flu-b
+        segment = segment.lower()
+        assert segment in ['ha','na'], f"Error: invalid segment {segment}"        
+        dataset = 'flu_vic_' + segment
+        segment_fasta_output = Path(input_fasta.parents[0], input_fasta.stem + '.' + segment + '.fasta')
+        with open(segment_fasta_output, 'w') as segment_fasta:
             for record in SeqIO.parse(input_fasta, 'fasta'):
-                if record.id.split('|').pop() == 'HA':
-                    SeqIO.write(record, ha_fasta, 'fasta-2line')
-        input_fasta = ha_fasta_output
+                if record.id.split('|').pop() == segment.upper():
+                    SeqIO.write(record, segment_fasta, 'fasta-2line')
+        input_fasta = segment_fasta_output
     else:
         dataset = pathogen
 
@@ -86,7 +91,7 @@ def process_with_nextclade(nextclade_dataset_dir:Path, output_tsv:Path, input_fa
         LOG.debug(f"NextClade processing complete: {output_tsv}")
     else:
         raise Exception(f"Error: NextClade processing of {input_fasta} failed:\n {result}")
-
+    
 
 def pull_previous_submissions(output_tsv:Path, output_tsv_other:Path, pathogen:str) -> Path:
     SARS_COV_2_TSV_URL = "https://api.github.com/repos/seattleflu/hcov19-sequence-identifiers/contents/hcov19-sequence-identifiers.tsv"

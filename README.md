@@ -110,8 +110,8 @@ Generates [Pileup](https://en.wikipedia.org/wiki/Pileup_format) for BAM file usi
 ### 11. Create bed file
 Creates a BED file for positions that need to be masked in the consensus genome. Positions need to be masked if they are below the minimum coverage depth.
 
-### 12. Call Consensus
-Calls consensus (SNPs/indels) from the Pileup based on parameters set in the config file using [varscan mpileup2cns](http://varscan.sourceforge.net/using-varscan.html#v2.3_mpileup2cns)
+### 12. Call Variants
+Calls variants (SNPs/indels) from the Pileup based on parameters set in the config file using [varscan mpileup2cns](http://varscan.sourceforge.net/using-varscan.html#v2.3_mpileup2cns)
 
 ### 13. Zip VCF
 Compress VCF using [bgzip](http://www.htslib.org/doc/bgzip.html), which allows indexes to be built against the file and allows the file be used without decompressing it.

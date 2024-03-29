@@ -365,7 +365,10 @@ def standardize_and_qc_external_metadata(metadata_filename:str, batch_date:datet
         'flua control',
         'flub control',
         'h3n2 control',
-        'h1n1 control'
+        'h1n1 control',
+        'blank control',
+        'h3n2_sars_rsvb_positives',
+        'h1n1_flub_rsva_positives'
     ]
 
     # all records with unique identifiers should be present in both sheets

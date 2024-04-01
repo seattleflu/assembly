@@ -8,9 +8,10 @@ Creates the following files:
 """
 import argparse
 import sys
+import re
 import pandas as pd
 from datetime import datetime
-from typing import List, Set, Optional
+from typing import List, Set, Optional, Tuple
 from pathlib import Path
 from Bio import SeqIO
 from utils import create_biosample_submission
@@ -409,6 +410,12 @@ def add_sample_sequence_status(sample_metadata: pd.DataFrame, segment_metadata: 
     # create series where index is nwgc_id and value is the number of segments that passed for that sample
     num_segments_passed = segment_metadata.groupby('nwgc_id')['segment_status'].apply(lambda x: x[x == 'passed'].count())
 
+    # start by labeling everything as submitted
+    sample_metadata['status'] = 'submitted'
+
+    # label missing collection date
+    sample_metadata.loc[sample_metadata['collection_date'].isnull(), 'status'] = 'missing collection date'
+
     # for each row in metadata, if all segments passed for that nwgc_id then 'sample_status' = 'submitted'
     # otherwise, 'sample_status' = 'not_submitted'
     #sample_metadata['status'] = sample_metadata['nwgc_id'].apply(lambda x: 'submitted' if num_segments_passed[x] == 8 else 'failed')
@@ -418,8 +425,8 @@ def add_sample_sequence_status(sample_metadata: pd.DataFrame, segment_metadata: 
         if sampleid not in num_segments_passed:
             print(f'Warning: Received metadata for sample {sampleid}, but no metrics. Skipping.')
             sample_metadata.loc[sample_metadata['nwgc_id'] == sampleid, 'status'] = 'metadata_received_but_no_seq_data'
-        else:
-            sample_metadata.loc[sample_metadata['nwgc_id'] == sampleid, 'status'] = 'submitted' if num_segments_passed[sampleid] == 8 else 'failed'
+        elif num_segments_passed[sampleid] != 8:
+                sample_metadata.loc[sample_metadata['nwgc_id'] == sampleid, 'status'] = 'failed'
 
     # Find duplicate samples within current metadata set
     # Keep the sample with the lower percent Ns
@@ -427,6 +434,7 @@ def add_sample_sequence_status(sample_metadata: pd.DataFrame, segment_metadata: 
     current_duplicate = sample_metadata.sort_values('percent_ns', ascending=True).duplicated(subset='lab_accession_id', keep='first')
     # Find samples that have been previously submitted and mark as 'dropped duplicate'
     overall_duplicate = sample_metadata['lab_accession_id'].isin(prev_subs)
+
     # Label duplicate samples as 'dropped duplicate'
     sample_metadata.loc[current_duplicate | overall_duplicate, 'status'] = 'dropped duplicate'
 
@@ -515,6 +523,10 @@ def create_summary_reports(metadata: pd.DataFrame, output_dir: Path, batch_name:
     counts_by_source = all_samples.groupby(['source']).size().reset_index(name='counts')
     counts_by_source.to_csv(output_dir / f'{batch_name}_sample_count_by_source.tsv', index=False, sep='\t')
 
+
+    # drop rows where collection_date is NA in order to get min and max date per source
+    # this only drops rows for the purposes of determining min and max collection dates, does not remove these rows from metadata df
+    all_samples = all_samples.dropna(subset=['collection_date'])
     sample_date_range = all_samples.groupby(['source']).agg({'collection_date': ['min', 'max']})
     sample_date_range.columns = list(map(''.join, sample_date_range.columns.values))
     sample_date_range['source'] = sample_date_range.index
@@ -536,147 +548,118 @@ def create_sample_status_report(metadata: pd.DataFrame, output_dir: Path, batch_
     metadata[sample_status_columns].to_csv(output_dir / f'{batch_name}_sample_status.csv', index=False)
 
 
-# def create_gisaid_submission(metadata: pd.DataFrame, fasta: str, output_dir: Path,
-#                              batch_name: str, submitter: str, test_name: str, subtype: str) -> None:
-#     """
-#     Create the CSV and FASTA files needed for submitting sequences to GISAID.
-#     Follows the bulk upload CSV format required by GISAID.
-#     """
-#     def load_authors(project: str) -> str:
-#         """
-#         Pulls author names from `submissions/source-data/authors/{project}.txt`
-#         and returs them in a single comma-separated string.
-#         """
-#         filename = base_dir / f'submissions/source-data/authors/{project}.txt'
-#         authors_list = text_to_list(filename)
+def create_genbank_submission(metadata: pd.DataFrame, fasta: str,
+                              output_dir: Path, batch_name: str, 
+                              pathogen: str, subtype: str) -> None:
+    """
+    Create the TSV and FASTA files necessary for submissions
+    through the NCBI website (https://submit.ncbi.nlm.nih.gov/subs/genbank/)
 
-#         return ', '.join(authors_list)
+    Creates a separate TSV + FASTA file for each project (scan, sfs, wa-doh)
+    since they have different list of authors.
 
-#     def add_dynamic_fields(row: pd.Series, authors: dict) -> pd.Series:
-#         """
-#         Add GISAID columns to provided *row* based on row values.
-#         This includes columns:
-#         - rsv_virus_name
-#         - rsv_location
-#         - rsv_sampling_strategy
-#         - rsv_coverage
-#         - rsv_orig_lab_addr
-#         - rsv_authors
-#         """
-#         # Create GISIAD location <region> / <country> / <state> / <county>
-#         row['rsv_location'] = f'North America / USA / {row["state"]}'
-#         if not pd.isna(row['county']):
-#             row['rsv_location'] = row['rsv_location'] + ' / ' +  row['county']
+    Expects the provided *metadata* to contain the BioSample columns created
+    by `create_biosample_submission`.
+    """
+    genbank_columns = {
+        "flu-a": [
+                    'Sequence_ID',
+                    'Organism',
+                    'country',
+                    'host',
+                    'isolate',
+                    'collection-date',
+                    'isolation-source',
+                    'serotype'
+                    ],
+        "flu-b": [
+                    'Sequence_ID',
+                    'Organism',
+                    'country',
+                    'host',
+                    'isolate',
+                    'collection-date',
+                    'isolation-source'         
+        ]
+    }
 
-#         # Match origin lab address based on originating lab
-#         row['rsv_orig_lab_addr'] = lab_addresses.get(row['rsv_orig_lab'])
-#         if row['rsv_orig_lab_addr'] is None:
-#             sys.exit(f"Could not find lab address for {row['rsv_orig_lab']}. " \
-#                       "Please add the address to `submissions/source-data/lab_addresses.tsv`")
+    column_map = {
+        'geo_loc_name': 'country',
+        'collection_date': 'collection-date',
+        'isolation_source': 'isolation-source'
+    }
 
-#         # Assign authors based on submission group
-#         assert row['submission_group'] in ['wa-doh', 'scan', 'sfs', 'cascadia', 'altius'], f'Invalid submission group: {row["submission_group"]}'
-#         row['rsv_authors'] = authors[row['submission_group']]
+    # Rename BioSample columns to match GenBank template columns
+    metadata.rename(columns=column_map, inplace=True)
 
-#         # Add `hCoV-19/` prefix per GISAID requirements
-#         row['rsv_virus_name'] = f'hCoV-19/{row["strain_name"]}'
-#         # Follow GISAIDS requirement of reporting coverage like '100x'
-#         row['rsv_coverage'] = row['coverage'].split('.')[0] + 'x'
+    if pathogen == 'flu-a':
+        metadata['Organism'] = 'Influenza A virus' # there is already an organism column in biosample_metadata, but that does not include the word 'virus' which GenBank wants
+        # if flu A, need to include subtype in genbank metadata
+        metadata['serotype'] = subtype.upper()
+    elif pathogen == 'flu-b':
+        metadata['Organism'] = 'Influenza B virus'
 
-#         # Follow CDC guidelines to label "Baseline surveillance" in `rsv_sampling_strategy` field
-#         row['rsv_sampling_strategy'] = None
-#         if row['baseline_surveillance'] == True:
-#             row['rsv_sampling_strategy'] = 'Baseline surveillance'
+    # Within the sample_name USA/<state>-<strain_id>/<year>
+    # the Sample_ID is the <state>-<strain_id>
+    metadata['Sample_ID'] = metadata['sample_name'].apply(
+        lambda x: x.split('/')[1]
+    )
 
-#         return row
+    # for genbank influenza submissions, isolate column cannot include forward slashes or information about organism, host, or location
+    # this is because genbank will automatically create the strain name based on all this information
+    metadata['isolate'] = metadata['isolate'].apply(lambda x: x.split('/')[3]) # THIS IS FRAGILE, depends on how isolate is formatted for BioSample
+    # since the above is fragile, make sure we really grabbed the strain name
+    if not all(metadata['isolate'].apply(lambda x: True if re.search(r'^[A-Z]+-S\d+$',x) else False)):
+        sys.exit('Error: could not obtain isolate name from biosample metadata isolate column. Expecting the following format: <pathogen>/<host>/<country>/<isolate>/<year> where the isolate is formatted as <STATE>-S<number>')
 
-#     authors = { group: load_authors(group) for group in SUBMISSION_GROUPS }
-#     lab_addresses = pd.read_csv(base_dir / 'submissions/source-data/lab_addresses.tsv', sep='\t', dtype='string')
-#     lab_addresses = lab_addresses.set_index('lab')['address'].to_dict()
-#     gisaid_file_base = f'SFS_{batch_name}_EpiRSV_BulkUpload'
-#     gisaid_fasta = f'{gisaid_file_base}.fasta'
+    # at this point, there is one entry per sample in the metadata df
+    # but for GenBank submission, we need one entry per sequence (8 sequences per sample)
+    # create a df that links Sequence_ID (which includes segment name) to Sample_ID, and then left join
+    # note that we create this df from scratch instead of pulling from segment_metadata because we only want submitted sequences
+    flu_segment_names = [
+        'HA',
+        'NA',
+        'NP',
+        'PA',
+        'PB1',
+        'PB2',
+        'MP',
+        'NS',
+    ]
 
-#     gisaid_columns = [
-#         'submitter',
-#         'fn',
-#         'rsv_virus_name',
-#         'rsv_type',
-#         'rsv_passage',
-#         'rsv_collection_date',
-#         'rsv_location',
-#         'rsv_add_location',
-#         'rsv_host',
-#         'rsv_add_host_info',
-#         'rsv_sampling_strategy',
-#         'rsv_gender',
-#         'rsv_patient_age',
-#         'rsv_patient_status',
-#         'rsv_specimen',
-#         'rsv_outbreak',
-#         'rsv_last_vaccinated',
-#         'rsv_treatment',
-#         'rsv_seq_technology',
-#         'rsv_assembly_method',
-#         'rsv_coverage',
-#         'rsv_orig_lab',
-#         'rsv_orig_lab_addr',
-#         'rsv_provider_sample_id',
-#         'rsv_subm_lab',
-#         'rsv_subm_lab_addr',
-#         'rsv_subm_sample_id',
-#         'rsv_authors'
-#     ]
+    # create list of sequence ids
+    sequence_id_list = []
+    for sampleid in metadata['Sample_ID']:
+        for segment_name in flu_segment_names:
+            sequence_id_list.append(str(sampleid)+'-'+segment_name)
 
-#     column_map = {
-#         'collection_date': 'rsv_collection_date',
-#         'originating_lab': 'rsv_orig_lab',
-#     }
+    # create segment_df
+    segment_df = pd.DataFrame(data=sequence_id_list,columns=['Sequence_ID'])
+    segment_df['Sample_ID'] = segment_df['Sequence_ID'].apply(lambda x: x.split('-')[0]+'-'+x.split('-')[1]) # sample ID is the sequence ID minus '-<segment name>'; need to split by -, but include the first part of the sequence ID/isolate which is <state>-
 
-#     # Create a deep copy so manipulations don't affect subsequent GenBank submissions
-#     gisaid_metadata = metadata.copy(deep=True)
-#     gisaid_metadata.rename(columns=column_map, inplace=True)
-#     # Ensure all GISAID columns are in the final DataFrame
-#     gisaid_metadata = gisaid_metadata.reindex(columns=list(metadata.columns) + gisaid_columns)
+    # left join segment_df to metadata
+    metadata = segment_df.merge(metadata, how='left', on='Sample_ID')
 
-#     # Hard-coded values
-#     gisaid_metadata['submitter'] = submitter
-#     gisaid_metadata['fn'] = gisaid_fasta
-#     gisaid_metadata['rsv_subtype'] = subtype
-#     gisaid_metadata['rsv_passage'] = 'Original'
-#     gisaid_metadata['rsv_host'] = 'Human'
-#     gisaid_metadata['rsv_gender'] = 'unknown'
-#     gisaid_metadata['rsv_patient_age'] = 'unknown'
-#     gisaid_metadata['rsv_patient_status'] = 'unknown'
-#     if test_name=='MIPsSEQ':
-#         gisaid_metadata['rsv_assembly_method'] = 'Brotman Baty Institute Viral MIP Sequencing'
-#         gisaid_metadata['rsv_seq_technology'] = 'Illumina MiSeq'
-#     else:
-#         raise ValueError(f"Invalid test_name: {test_name}")
-#     gisaid_metadata['rsv_subm_lab'] = SFS
-#     gisaid_metadata['rsv_subm_lab_addr'] = lab_addresses[SFS]
-
-#     # Dynamic values based on metadata for each sample
-#     gisaid_metadata = gisaid_metadata.apply(add_dynamic_fields, args=(authors,), axis=1)
-
-#     # Create the new GISAID FASTA after replacing the record ids with the rsv_virus_name
-#     create_submission_fasta(fasta, gisaid_metadata, 'rsv_virus_name', output_dir / gisaid_fasta)
-
-#     gisaid_metadata[gisaid_columns].to_csv(output_dir / f'{gisaid_file_base}.csv', index=False)
+    for group in SUBMISSION_GROUPS:
+        group_metadata = metadata.loc[metadata['submission_group'] == group]
+        if len(group_metadata.index) > 0:
+            output_base = output_dir / f'{batch_name}_{group}_genbank'
+            columns_to_use = genbank_columns[pathogen]
+            group_metadata[columns_to_use].to_csv(f'{output_base}_metadata.tsv', sep='\t', index=False)
+            create_submission_fasta(fasta, group_metadata, 'isolate', f'{output_base}.fasta', True)
 
 
-def parse_fasta_id(record_id: str) -> str:
+def parse_fasta_id(record_id: str) -> Tuple[str, str]:
     """
     Returns the nwgc_id embedded in the provided *record_id*
 
     Expects the *record_id* to have the format:
-    `Consensus_<nwgc_id>.consensus_threshold_0.5_quality_20`
-    or
-    `<nwgc_id>|...`
+    `<nwgc_id>|...|<segment_name>`
     """
     if '|' in record_id:
-        return record_id.split('|')[0]
+        return record_id.split('|')[0], record_id.split('|')[-1]
     else:
-        return record_id.split('.')[0].split('_')[1]
+        sys.exit(f'Error: fasta contig name does not include | character as expected: {record_id}')
 
 
 def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
@@ -686,7 +669,7 @@ def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
     Create a new FASTA file *output_fasta* by filtering for sequences that have
     `nwgc_id` that are included in the provided *metadata*.
     Replaces the original FASTA record id with the corresponding
-    *record_id_col* in the *metadata*.
+    *record_id_col* in the *metadata* and the *segment_name* from the fasta entry.
 
     If *tag_baseline* is True, then add baseline tag to the sequences
     according to CDC guidelines:
@@ -694,20 +677,23 @@ def create_submission_fasta(fasta: str, metadata: pd.DataFrame,
     """
     with open(fasta, 'r') as original, open(output_fasta, 'w') as output:
         for record in SeqIO.parse(original, 'fasta'):
-            nwgc_id = parse_fasta_id(record.id)
+            nwgc_id, segment_name = parse_fasta_id(record.id)
             record_metadata = metadata.loc[metadata['nwgc_id'] == nwgc_id].to_dict('records')
-            # This should never happen!
-            if len(record_metadata) > 1:
-                sys.exit(f"Found multiple metadata records for NWGC ID «{nwgc_id}»")
-            if len(record_metadata) == 1:
-                record.id = record_metadata[0][record_id_col]
+            # this check doesn't make sense with flu
+            # # This should never happen!
+            # if len(record_metadata) > 1:
+            #     sys.exit(f"Found multiple metadata records for NWGC ID «{nwgc_id}»")
+            if len(record_metadata) == 8: # there should be 8 sequences with this nwgc id
+                record.id = record_metadata[0][record_id_col]+'-'+segment_name
                 record.description = ''
+                record.seq = record.seq.upper()
                 # If required, add tag for baseline samples
                 if (tag_baseline == True and
                     record_metadata[0]['baseline_surveillance'] == True):
                     record.description = '[keyword=purposeofsampling:baselinesurveillance]'
-
                 SeqIO.write(record, output, 'fasta-2line')
+            elif len(record_metadata) >=1:
+                sys.exit(f'Error: Unexpected number of metadata records for NWGC ID {nwgc_id}')
 
 
 if __name__ == '__main__':
@@ -741,6 +727,8 @@ if __name__ == '__main__':
         help = "Path to the output directory for all output files")
     parser.add_argument("--pathogen", type=str, required=True,
         choices=['rsv-a', 'rsv-b', 'flu-a', 'flu-b'])
+    parser.add_argument("--subtype", type=str, required=False,
+        choices=['h1n1', 'h3n2'])
     parser.add_argument("--test-name", type=str, required=True,
         choices=['MIPsSEQ'],
         help = "Test name (MIPsSEQ)")
@@ -750,6 +738,9 @@ if __name__ == '__main__':
     # if pathogen is flu, check that segment metrics argument was provided
     if args.pathogen.startswith("flu") and args.segment_metrics is None:
         parser.error("--segment-metrics is required if --pathogen is set to flu-a or flu-b")
+
+    if args.pathogen == 'flu-a' and args.subtype is None:
+        parser.error("--subtype is required when --pathogen is flu-a")
 
     # not running vadr for flu, so for now failed_nwgc_ids = []
     failed_nwgc_ids = []
@@ -808,3 +799,6 @@ if __name__ == '__main__':
 
     biosample_metadata = create_biosample_submission(submit_metadata, output_dir, batch_name, args.pathogen)
     biosample_metadata.to_csv(output_dir / f'biosample_metadata.csv', index=False)
+
+    # create genbank submissions
+    create_genbank_submission(biosample_metadata, args.fasta, output_dir, batch_name, args.pathogen, args.subtype)

@@ -514,14 +514,14 @@ def create_biosample_submission(metadata: pd.DataFrame, output_dir: Path, batch_
         },
         'flu-a': {
             'bioproject_accession': 'PRJNA988813', # https://www.ncbi.nlm.nih.gov/bioproject/PRJNA988813
-            'organism': 'Influenza A',
+            'organism': 'Influenza A virus',
             'host_disease': 'Influenza A',
             'isolation_source': 'nasal swab',
             'lat_lon': 'missing',
         },
         'flu-b': {
             'bioproject_accession': 'PRJNA988156', # https://www.ncbi.nlm.nih.gov/bioproject/PRJNA988156
-            'organism': 'Influenza B',
+            'organism': 'Influenza B virus',
             'host_disease': 'Influenza B',
             'isolation_source': 'nasal swab',
             'lat_lon': 'missing'

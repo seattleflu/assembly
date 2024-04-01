@@ -430,6 +430,9 @@ def create_summary_reports(metadata: pd.DataFrame, output_dir: Path, batch_name:
     counts_by_source = all_samples.groupby(['source']).size().reset_index(name='counts')
     counts_by_source.to_csv(output_dir / f'{batch_name}_sample_count_by_source.tsv', index=False, sep='\t')
 
+    # drop rows where collection_date is NA in order to get min and max date per source
+    # this only drops rows for the purposes of determining min and max collection dates, does not remove these rows from metadata df
+    all_samples = all_samples.dropna(subset=['collection_date'])
     sample_date_range = all_samples.groupby(['source']).agg({'collection_date': ['min', 'max']})
     sample_date_range.columns = list(map(''.join, sample_date_range.columns.values))
     sample_date_range['source'] = sample_date_range.index

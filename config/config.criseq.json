@@ -30,7 +30,7 @@
       "bowtie2" :
         {
           "threads" : "4",
-          "all" : "-a"
+          "all" : ""
         },
       "mpileup" :
         {
